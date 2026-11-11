@@ -1,6 +1,6 @@
 site_name: Anvil
 site_description: Opinionated .NET & Akka.NET conventions — forged from real projects.
-site_url: https://st0o0.github.io/anvil/
+site_url: https://anvil.st0o0.net/
 
 theme:
   name: material
