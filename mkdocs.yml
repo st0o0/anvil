@@ -1,0 +1,88 @@
+site_name: Anvil
+site_description: Opinionated .NET & Akka.NET conventions — forged from real projects.
+site_url: https://st0o0.github.io/anvil/
+
+theme:
+  name: material
+  palette:
+    - media: "(prefers-color-scheme: light)"
+      scheme: default
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-7
+        name: Switch to dark mode
+    - media: "(prefers-color-scheme: dark)"
+      scheme: slate
+      primary: indigo
+      accent: indigo
+      toggle:
+        icon: material/brightness-4
+        name: Switch to light mode
+  features:
+    - navigation.sections
+    - navigation.expand
+    - navigation.top
+    - search.highlight
+    - content.code.copy
+    - content.code.annotate
+  icon:
+    repo: fontawesome/brands/github
+
+repo_url: https://github.com/st0o0/anvil
+repo_name: st0o0/anvil
+
+markdown_extensions:
+  - admonition
+  - pymdownx.details
+  - pymdownx.superfences
+  - pymdownx.highlight:
+      anchor_linenums: true
+  - pymdownx.inlinehilite
+  - pymdownx.tabbed:
+      alternate_style: true
+  - pymdownx.emoji:
+      emoji_index: !!python/name:material.extensions.emoji.twemoji
+      emoji_generator: !!python/name:material.extensions.emoji.to_svg
+  - toc:
+      permalink: true
+  - attr_list
+  - def_list
+
+nav:
+  - Home: index.md
+  - Getting Started:
+      - Project Scaffolding: getting-started/project-scaffolding.md
+      - Solution Structure: getting-started/solution-structure.md
+      - Dev Environment: getting-started/dev-environment.md
+  - C# Conventions:
+      - Coding Standards: csharp/coding-standards.md
+      - Type Design: csharp/type-design.md
+      - Enum Conventions: csharp/enum-conventions.md
+      - Async Patterns: csharp/async-patterns.md
+  - Akka.NET:
+      - Actor Design: akka/actor-design.md
+      - State Management: akka/state-management.md
+      - Messaging: akka/messaging.md
+      - Persistence: akka/persistence.md
+      - Streams: akka/streams.md
+      - Cluster & Sharding: akka/cluster.md
+      - Supervision: akka/supervision.md
+  - API Design:
+      - Minimal API Endpoints: api/minimal-api.md
+      - Models & Mapping: api/models-and-mapping.md
+  - Testing:
+      - Philosophy: testing/philosophy.md
+      - Assertion Conventions: testing/assertions.md
+      - Actor Testing: testing/actor-testing.md
+      - Mutation Testing: testing/mutation-testing.md
+      - Architecture Tests: testing/architecture-tests.md
+  - DI & Configuration:
+      - Dependency Injection: config/dependency-injection.md
+      - Options Pattern: config/options-pattern.md
+  - Observability:
+      - Metrics: observability/metrics.md
+      - Logging: observability/logging.md
+  - CI/CD:
+      - Build Pipeline: ci/build.md
+      - GitHub Actions: ci/github-actions.md
