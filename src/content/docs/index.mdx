@@ -3,7 +3,7 @@ title: Anvil
 description: Opinionated .NET & Akka.NET conventions - forged from real projects.
 template: splash
 hero:
-  tagline: Opinionated .NET & Akka.NET conventions - forged from real projects, real mistakes, and real corrections.
+  tagline: Opinionated .NET & Akka.NET conventions — forged from real projects, real mistakes, and real corrections.
   actions:
     - text: Get Started
       link: /getting-started/project-scaffolding/
@@ -15,25 +15,38 @@ hero:
       variant: minimal
 ---
 
+import { Card, CardGrid, LinkCard } from '@astrojs/starlight/components';
+
 ## What this is
 
 A living reference of conventions, patterns, and anti-patterns for .NET services built on Akka.NET. Every rule here was learned the hard way: by building it wrong first, finding the root cause, and establishing the convention so it doesn't happen again.
 
-These conventions cover:
-
-- **C# fundamentals** - naming, type design, enums, async patterns
-- **Akka.NET** - actor design, state management, messaging, persistence, streams
-- **API design** - Minimal API endpoints, models, mapping
-- **Testing** - philosophy, assertions, actor testing, mutation testing
-- **DI & configuration** - options pattern, validation
-- **Observability** - metrics, logging
-- **CI/CD** - build pipeline, warnings-as-errors
+<CardGrid>
+  <Card title="C# Fundamentals" icon="seti:csharp">
+    Naming, type design, enums, async patterns — the foundation everything else builds on.
+  </Card>
+  <Card title="Akka.NET" icon="rocket">
+    Actor design, state management, messaging, persistence, streams, clustering, supervision.
+  </Card>
+  <Card title="API Design" icon="puzzle">
+    Minimal API endpoints, models, mapping — clean request/response boundaries.
+  </Card>
+  <Card title="Testing" icon="approve-check-circle">
+    Philosophy-first testing: assertions, actor testing, mutation testing, architecture tests.
+  </Card>
+  <Card title="DI & Configuration" icon="setting">
+    Options pattern, validation, dependency injection — structured and type-safe.
+  </Card>
+  <Card title="Observability" icon="open-book">
+    Metrics and logging conventions — know what your system is doing.
+  </Card>
+</CardGrid>
 
 ## Philosophy
 
 ### Fix the root cause, not the symptom
 
-When an actor crashes, find out **why** it crashes. Don't add a watchdog that restarts it. Don't wrap it in a try-catch. Don't add a workaround that hides the problem. Workarounds compound - every one you add makes the next bug harder to find.
+When an actor crashes, find out **why** it crashes. Don't add a watchdog that restarts it. Don't wrap it in a try-catch. Don't add a workaround that hides the problem. Workarounds compound — every one you add makes the next bug harder to find.
 
 ### Less is more
 
@@ -41,24 +54,21 @@ Before adding a framework, abstraction, or helper: do you actually need it? Thre
 
 ### Types over strings
 
-If a value comes from a known set, it's an enum. If a record carries structured data, it has typed properties. Strings are for free-form text, display values, and external API boundaries - nowhere else.
+If a value comes from a known set, it's an enum. If a record carries structured data, it has typed properties. Strings are for free-form text, display values, and external API boundaries — nowhere else.
 
 ### Think before building
 
 Design the solution end-to-end before writing code. Consider how it will be tested, how it will fail, and how it will be extended. A 20-minute design discussion saves 2 hours of rework.
 
-### FunkArr as reference implementation
+## Quick Navigation
 
-Throughout these docs, patterns reference a real project architecture. The conventions aren't theoretical - they're extracted from a working system with ~1200 tests across 11 test projects.
-
-## How to use this
-
-- **Starting a new project?** Read [Project Scaffolding](/getting-started/project-scaffolding/) and [Solution Structure](/getting-started/solution-structure/).
-- **Writing an actor?** Read [Actor Design](/akka/actor-design/), [State Management](/akka/state-management/), and [Messaging](/akka/messaging/).
-- **Writing tests?** Read [Philosophy](/testing/philosophy/) first, then the specific testing page.
-- **Adding an API endpoint?** Read [Minimal API Endpoints](/api/minimal-api/).
-- **Not sure about a pattern?** Search - every convention includes the anti-pattern it replaces and the reason it exists.
+<CardGrid>
+  <LinkCard title="Project Scaffolding" description="Start a new project the right way." href="/getting-started/project-scaffolding/" />
+  <LinkCard title="Actor Design" description="Build actors that are testable and maintainable." href="/akka/actor-design/" />
+  <LinkCard title="Testing Philosophy" description="Why we test the way we test." href="/testing/philosophy/" />
+  <LinkCard title="Minimal API" description="Clean endpoints with clear boundaries." href="/api/minimal-api/" />
+</CardGrid>
 
 ## License
 
-Code examples are [MIT](https://github.com/st0o0/anvil/blob/astro/LICENSE) licensed. Documentation content is [CC BY 4.0](https://github.com/st0o0/anvil/blob/astro/LICENSE-CONTENT) licensed.
+Code examples are [MIT](https://github.com/st0o0/anvil/blob/main/LICENSE) licensed. Documentation content is [CC BY 4.0](https://github.com/st0o0/anvil/blob/main/LICENSE-CONTENT) licensed.

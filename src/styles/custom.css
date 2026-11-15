@@ -1,0 +1,109 @@
+/* Anvil — Forge Theme
+   Warm amber accent on deep dark backgrounds */
+
+/* ── Accent Colors ── */
+:root {
+	--sl-color-accent-low: #2a1f0d;
+	--sl-color-accent: #e8a838;
+	--sl-color-accent-high: #fff5e0;
+}
+
+:root[data-theme='light'] {
+	--sl-color-accent-low: #fff5e0;
+	--sl-color-accent: #b47818;
+	--sl-color-accent-high: #1a1000;
+}
+
+/* ── Typography ── */
+:root {
+	--sl-font: 'Inter', system-ui, -apple-system, 'Segoe UI', sans-serif;
+	--sl-font-mono: 'JetBrains Mono', 'Fira Code', 'Cascadia Code', ui-monospace,
+		monospace;
+}
+
+/* ── Hero Tweaks ── */
+.hero {
+	padding-block: 3rem;
+}
+
+.hero .tagline {
+	font-size: var(--sl-text-xl) !important;
+	color: var(--sl-color-gray-2);
+}
+
+.hero h1 {
+	font-size: var(--sl-text-5xl) !important;
+	background: linear-gradient(135deg, #e8a838, #f0c060, #e8a838);
+	background-clip: text;
+	-webkit-background-clip: text;
+	-webkit-text-fill-color: transparent;
+}
+
+/* ── Sidebar Polish ── */
+nav.sidebar .top-level > li > details > summary,
+nav.sidebar .top-level > li > a {
+	font-weight: 600;
+	text-transform: uppercase;
+	font-size: var(--sl-text-xs);
+	letter-spacing: 0.05em;
+}
+
+/* ── Code Blocks ── */
+.expressive-code pre {
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.5rem;
+}
+
+/* ── Content Cards on Homepage ── */
+.sl-markdown-content .card-grid {
+	display: grid;
+	grid-template-columns: repeat(auto-fit, minmax(16rem, 1fr));
+	gap: 1rem;
+	margin-block: 1.5rem;
+}
+
+.sl-markdown-content .card {
+	padding: 1.25rem;
+	border: 1px solid var(--sl-color-gray-5);
+	border-radius: 0.75rem;
+	background: var(--sl-color-gray-6);
+	transition: border-color 0.2s, transform 0.15s;
+}
+
+.sl-markdown-content .card:hover {
+	border-color: var(--sl-color-accent);
+	transform: translateY(-2px);
+}
+
+.sl-markdown-content .card h3 {
+	margin-top: 0;
+	font-size: var(--sl-text-base);
+	color: var(--sl-color-accent);
+}
+
+.sl-markdown-content .card p {
+	font-size: var(--sl-text-sm);
+	color: var(--sl-color-gray-2);
+	margin-bottom: 0;
+}
+
+/* ── Smooth Scroll ── */
+html {
+	scroll-behavior: smooth;
+}
+
+/* ── Content Width ── */
+.content-panel {
+	max-width: 52rem;
+}
+
+/* ── Link Styling ── */
+.sl-markdown-content a:not(.card a) {
+	text-decoration-color: var(--sl-color-accent-low);
+	text-underline-offset: 0.15em;
+	transition: text-decoration-color 0.2s;
+}
+
+.sl-markdown-content a:not(.card a):hover {
+	text-decoration-color: var(--sl-color-accent);
+}
