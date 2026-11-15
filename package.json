@@ -4,6 +4,7 @@
   "version": "0.0.1",
   "scripts": {
     "dev": "astro dev",
+    "prebuild": "node scripts/generate-llms-txt.mjs",
     "build": "astro build",
     "preview": "astro preview",
     "check": "astro check",

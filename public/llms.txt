@@ -1,0 +1,57 @@
+# Anvil
+
+> Opinionated .NET & Akka.NET conventions - forged from real projects.
+
+This file is a machine-readable index of all conventions on [https://anvil.st0o0.net](https://anvil.st0o0.net).
+For the complete content in a single file, see [llms-full.txt](https://anvil.st0o0.net/llms-full.txt).
+
+## Getting Started
+
+- [Project Scaffolding](https://anvil.st0o0.net/getting-started/project-scaffolding/): Every new project starts from one of the template repositories. They include the root-level files, CI workflows, and tooling described below - so you get a working setup without manual assembly.
+- [Solution Structure](https://anvil.st0o0.net/getting-started/solution-structure/): A multi-project solution with strict domain isolation. Structure is enforced by architecture tests, not by convention alone.
+- [Dev Environment](https://anvil.st0o0.net/getting-started/dev-environment/): The application runs in Docker during development, together with the services it depends on. This keeps local behavior close to production.
+
+## C# Conventions
+
+- [C# Coding Standards](https://anvil.st0o0.net/csharp/coding-standards/): Formatting and style rules enforced by tooling. If a rule is not machine-checked, it is still expected in review.
+- [Type Design](https://anvil.st0o0.net/csharp/type-design/): Choose the type kind by what the type is for. The defaults below keep types small, safe to share, and cheap to reason about.
+- [Enum Conventions](https://anvil.st0o0.net/csharp/enum-conventions/): These rules are violated often and are costly to fix once values are stored or on the wire. Follow them exactly.
+- [Async Patterns](https://anvil.st0o0.net/csharp/async-patterns/): Rules for asynchronous code, cancellation, time, and concurrency.
+
+## Akka.NET
+
+- [Actor Design Conventions](https://anvil.st0o0.net/akka/actor-design/): Actors are **thin plumbing**: message routing, persistence hooks and lifecycle. Domain logic and mutable domain state live elsewhere (see [State Management](state-management)).
+- [Actor State Pattern](https://anvil.st0o0.net/akka/state-management/): The "Pathfinder pattern": all mutable domain state lives in a dedicated state class. The actor only routes messages and calls `Apply`.
+- [Message Conventions](https://anvil.st0o0.net/akka/messaging/): Command and its responses live in one file.
+- [Persistence Conventions](https://anvil.st0o0.net/akka/persistence/): Three tools, each with exactly one job.
+- [Akka.Streams Discipline](https://anvil.st0o0.net/akka/streams/): These rules are the ones broken and corrected most often. Read them before writing any stream.
+- [Cluster & Sharding](https://anvil.st0o0.net/akka/cluster/): Three hosting shapes, each with a fixed naming convention.
+- [Supervision Strategies](https://anvil.st0o0.net/akka/supervision/): Supervision decides what happens when a child actor throws. Defaults are good; deviate deliberately.
+
+## API Design
+
+- [Minimal API Endpoint Conventions](https://anvil.st0o0.net/api/minimal-api/): Endpoints are thin transport adapters. They translate HTTP into a message, ask a domain actor, and translate the response back into an `IResult`.
+- [API Models & Mapping](https://anvil.st0o0.net/api/models-and-mapping/): API models are a separate type world from domain messages. Mapping extensions are the explicit bridge between the two.
+
+## Testing
+
+- [Testing Philosophy](https://anvil.st0o0.net/testing/philosophy/): Tests exist to pin down behavior and catch regressions. They do not exist to
+- [Assertion Conventions](https://anvil.st0o0.net/testing/assertions/): Patterns for xUnit assertions. The goal is failures that point at the cause and
+- [Actor Testing](https://anvil.st0o0.net/testing/actor-testing/): Conventions for testing Akka.NET actors. Examples assume xUnit.
+- [Mutation Testing with Stryker.NET](https://anvil.st0o0.net/testing/mutation-testing/): Mutation testing changes production code in small ways (`>` to `>=`, `+` to `-`,
+- [Architecture Tests with ArchUnitNET](https://anvil.st0o0.net/testing/architecture-tests/): Architecture tests turn structural conventions into failing builds. They live in
+
+## DI & Configuration
+
+- [DI Conventions](https://anvil.st0o0.net/config/dependency-injection/): Dependency injection is organized per domain and composed in `Program.cs`. The container is never queried by application code.
+- [Options Pattern](https://anvil.st0o0.net/config/options-pattern/): Do not build custom singleton resolution when `IOptions<T>` plus `PostConfigure` already exists. Reaching for a bespoke resolver, plan object, or info service is the most common mistake in this area.
+
+## Observability
+
+- [Metrics Conventions](https://anvil.st0o0.net/observability/metrics/): Metrics use `System.Diagnostics.Metrics` with one meter per domain, exported through OpenTelemetry to Prometheus.
+- [Logging Conventions](https://anvil.st0o0.net/observability/logging/): Which logger you use depends on where the code runs. Structured templates are mandatory everywhere.
+
+## CI/CD
+
+- [Build Pipeline](https://anvil.st0o0.net/ci/build/): The build has one job: prove the solution compiles cleanly, is formatted, and passes its tests. All commands run from the repository root.
+- [GitHub Actions](https://anvil.st0o0.net/ci/github-actions/): Workflows are split by cost: fast checks on every change, slow checks on a schedule. All CI workflows call reusable workflows from [github-workflows](https://github.com/st0o0/github-workflows) - pin t

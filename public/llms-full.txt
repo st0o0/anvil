@@ -1,0 +1,3025 @@
+# Anvil - Complete .NET & Akka.NET Conventions Reference
+
+> Opinionated .NET & Akka.NET conventions - forged from real projects.
+> Source: https://anvil.st0o0.net
+
+---
+
+# Getting Started
+
+---
+
+## Project Scaffolding
+
+Every new project starts from one of the template repositories. They include the root-level files, CI workflows, and tooling described below - so you get a working setup without manual assembly.
+
+## Template repositories
+
+| Template | Use for | Create |
+|----------|---------|--------|
+| [dotnet.application](https://github.com/st0o0/dotnet.application) | Services, APIs, Akka.NET apps with Docker | "Use this template" on GitHub |
+| [dotnet.library](https://github.com/st0o0/dotnet.library) | NuGet packages | "Use this template" on GitHub |
+
+Both are GitHub template repositories. Click "Use this template" to create a new repo with the full structure, then rename `ProjectName` to your actual project name.
+
+:::tip
+Always start from a template. Do not create a new repo from scratch and copy files over - the templates carry CI, release automation, commit linting, and security scanning that are easy to miss.
+:::
+
+## What the templates include
+
+### Root-level files
+
+```text
+repo/
+  global.json
+  .editorconfig
+  .config/
+    dotnet-tools.json
+  commitlint.config.mjs
+  renovate.json
+  release-please-config.json
+  .release-please-manifest.json
+  trivy.yaml
+  src/
+    ProjectName.slnx
+    Directory.Build.props
+    Directory.Packages.props
+```
+
+### CI and automation (pre-configured)
+
+| File | Purpose |
+|------|---------|
+| `commitlint.config.mjs` | Enforces [Conventional Commits](https://www.conventionalcommits.org/) (`feat:`, `fix:`, `docs:`, etc.) |
+| `release-please-config.json` | Automatic versioning and changelog from commit messages |
+| `renovate.json` | Automated dependency updates via Renovate |
+| `trivy.yaml` | Container and dependency vulnerability scanning |
+
+The CI workflows call reusable workflows from [github-workflows](https://github.com/st0o0/github-workflows). See [GitHub Actions](../ci/github-actions) for details.
+
+## Solution format: .slnx
+
+Use the `.slnx` XML solution format. It is human-readable, diff-friendly, and avoids the GUID noise of `.sln`.
+
+```xml
+<Solution>
+  <Folder Name="/src/">
+    <Project Path="ProjectName/ProjectName.csproj" />
+    <Project Path="ProjectName.Core/ProjectName.Core.csproj" />
+  </Folder>
+</Solution>
+```
+
+## Directory.Build.props
+
+Shared properties for every project in the tree.
+
+```xml
+<Project>
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>latest</LangVersion>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
+```
+
+## Central Package Management
+
+Versions live in `Directory.Packages.props`. Project files reference packages without versions.
+
+```xml
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="Akka" Version="1.5.0" />
+    <PackageVersion Include="xunit.v3" Version="1.0.0" />
+  </ItemGroup>
+</Project>
+```
+
+:::tip
+Use `dotnet add package` / `dotnet remove package` rather than editing XML by hand. Use shared version properties for related packages that must move together.
+:::
+
+## global.json
+
+Pin the SDK so every machine and CI runner builds with the same version.
+
+```json
+{
+  "sdk": {
+    "version": "10.0.100",
+    "rollForward": "latestFeature"
+  }
+}
+```
+
+## .editorconfig
+
+The `.editorconfig` defines code style and naming rules, enforced by `dotnet format` in CI. The templates ship with a complete `.editorconfig` that covers:
+
+- File-scoped namespaces, explicit accessibility modifiers
+- `_camelCase` for private fields, `PascalCase` for types and constants, `I` prefix for interfaces
+- Braces always, readonly fields, collection expressions, null propagation
+- Analyzer severities (IDE0005, CA2007, CA1852, etc.)
+- Relaxed rules for test projects (CA1707, CA2007, CS1591 off)
+
+:::danger[Never modify .editorconfig to silence warnings]
+The file defines the project's rules. Fix the code to match it. Changing a rule to make a warning disappear defeats the purpose of having one.
+:::
+
+## Local tools
+
+Declare tools in `.config/dotnet-tools.json` so everyone (and CI) uses the same versions.
+
+```json
+{
+  "version": 1,
+  "isRoot": true,
+  "tools": {
+    "dotnet-stryker": { "version": "4.0.0", "commands": ["dotnet-stryker"] },
+    "dotnet-reportgenerator-globaltool": { "version": "5.3.0", "commands": ["reportgenerator"] }
+  }
+}
+```
+
+Restore with `dotnet tool restore`. `dotnet format` ships with the SDK, so it needs no manifest entry.
+
+---
+
+## Solution Structure
+
+A multi-project solution with strict domain isolation. Structure is enforced by architecture tests, not by convention alone.
+
+The [dotnet.application](https://github.com/st0o0/dotnet.application) template ships with this layout. For libraries, the [dotnet.library](https://github.com/st0o0/dotnet.library) template uses a simpler structure without domain projects or persistence.
+
+## Layout
+
+```text
+src/
+  YourApp.slnx
+  YourApp/                   # Host
+  YourApp.Core/              # Common types, framework refs
+  YourApp.Messages/          # Commands, queries, responses
+  YourApp.Persistence/       # Versioned DTOs
+  YourApp.Api/               # Internal REST API
+  YourApp.Search/            # Domain
+  YourApp.Download/          # Domain
+  YourApp.Scoring/           # Domain
+  YourApp.Search.Tests/
+  YourApp.Download.Tests/
+  YourApp.Architecture.Tests/
+  YourApp.Tests.Shared/
+```
+
+## Projects
+
+| Project | Responsibility |
+|---------|----------------|
+| Host | `Program.cs`, startup, DI composition, configuration |
+| Core | Common types and framework references (Akka, etc.). References Messages and Persistence |
+| Messages | Commands, queries, responses for all domains |
+| Persistence | DTOs. Extend-only, versioned records |
+| Domain projects | One per bounded context. No references to each other |
+| API project(s) | Thin adapter layer that translates protocols to messages |
+| Test projects | One per domain project, mirroring its folder structure |
+| Architecture.Tests | ArchUnitNET structural rules |
+| Tests.Shared | Shared test infrastructure |
+
+## Reference direction
+
+```text
+Host -> API -> Domains -> Core -> Messages / Persistence
+```
+
+:::danger[Never upward, never cross-domain]
+A project may only reference projects to its right. Domain projects never reference each other. They communicate only through messages defined in `Messages`.
+:::
+
+
+- **Core bundles framework references.** It declares the framework NuGet packages so domain projects reference only Core.
+- **API projects are thin adapters.** They translate external protocols into domain commands and queries. No business logic.
+- **Persistence DTOs are extend-only.** Add members, never rename or remove, so stored data stays readable.
+
+## Domain isolation
+
+Two domains that need to talk do it through a message contract:
+
+```csharp
+// YourApp.Messages
+public sealed record QueryRuleSet(string RuleSetId);
+
+// YourApp.Search sends it, YourApp.RuleSet handles it.
+// Neither project references the other.
+```
+
+If two domains need the same type, it belongs in Messages (for contracts) or Core (for common utilities), not in one domain.
+
+## Tests
+
+- One test project per domain project: `YourApp.Search` is tested by `YourApp.Search.Tests`.
+- Test folders mirror the source folders, so finding a test is mechanical.
+- Shared fixtures and helpers live in `Tests.Shared`, referenced only by test projects.
+
+## Architecture tests
+
+Use ArchUnitNET to enforce the rules above so violations fail the build.
+
+```csharp
+[Fact]
+public void Domains_do_not_reference_each_other()
+{
+    var rule = Types().That().ResideInNamespace("YourApp.Search")
+        .Should().NotDependOnAny(Types().That().ResideInNamespace("YourApp.Download"));
+
+    rule.Check(Architecture);
+}
+```
+
+Typical rules: reference direction, naming conventions, domain boundaries, and sealed-by-default types.
+
+---
+
+## Dev Environment
+
+The application runs in Docker during development, together with the services it depends on. This keeps local behavior close to production.
+
+The [dotnet.application](https://github.com/st0o0/dotnet.application) template ships with a `docker-compose.yml` and `Dockerfile` ready to use. Extend it with your service dependencies as shown below.
+
+## Docker Compose
+
+Use the compose file for local development, containing the app plus its dependencies.
+
+```yaml
+# docker-compose.yml
+services:
+  app:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    ports:
+      - "8080:8080"
+    environment:
+      ASPNETCORE_ENVIRONMENT: Development
+      Download__MaxParallel: "2"
+    volumes:
+      - ./data:/data
+    depends_on:
+      - db
+
+  db:
+    image: postgres:17
+    environment:
+      POSTGRES_PASSWORD: dev
+    volumes:
+      - dbdata:/var/lib/postgresql/data
+
+volumes:
+  dbdata:
+```
+
+Start and rebuild:
+
+```powershell
+docker compose up -d --build
+```
+
+Stop:
+
+```powershell
+docker compose down
+```
+
+## Never `dotnet run` the app
+
+:::danger
+Do not start the application with `dotnet run`. Always use Docker Compose.
+:::
+
+
+Running outside the container diverges from the real environment: different paths, missing dependencies, different networking, and configuration that only exists in compose. Bugs found this way are often not reproducible.
+
+This rule is about the *application*. Test projects are executables and are run with `dotnet run` as described in [Build Pipeline](../ci/build).
+
+## Configuration
+
+Pass settings as environment variables using the `Section__Key` convention. Compose is the single place where dev defaults for the container are defined. See [Options Pattern](../config/options-pattern) for how they bind.
+
+## Frontend
+
+If the solution has a frontend, keep it in its own project folder with its own package manager (pnpm or npm), and commit the lockfile.
+
+```text
+src/YourApp.UI/
+  package.json
+  pnpm-lock.yaml
+```
+
+```powershell
+pnpm install
+pnpm dev
+```
+
+Pick one package manager per repository and do not mix lockfiles.
+
+## Hot reload
+
+Where possible, use volume mounts so changes are picked up without a full image rebuild.
+
+| What | Approach |
+|------|----------|
+| Frontend | Mount source and run the dev server (Vite HMR) in a container |
+| Config files | Mount as a volume, restart the container |
+| .NET code | Rebuild the image. `dotnet watch` inside a container is optional and only if it is reliable for your stack |
+
+:::tip
+Keep Dockerfile layers ordered so restore is cached (copy project files and `Directory.Packages.props` first, then source). Rebuilds then stay fast.
+:::
+
+
+## Checklist
+
+- [x] `docker-compose.yml` runs the app and its dependencies
+- [x] App is never started with `dotnet run`
+- [x] Frontend uses a single package manager with a committed lockfile
+- [x] Volume mounts for fast iteration where possible
+
+---
+
+# C# Conventions
+
+---
+
+## C# Coding Standards
+
+Formatting and style rules enforced by tooling. If a rule is not machine-checked, it is still expected in review.
+
+## Formatting
+
+- Allman style braces: the opening brace goes on its own line.
+- 4 spaces indentation, no tabs.
+- Sort `using` directives with `System.*` first, then the rest alphabetically.
+
+```csharp
+using System.Text.Json;
+using Microsoft.Extensions.Logging;
+
+namespace Acme.Billing;
+
+public sealed class InvoiceService
+{
+    public void Send(Invoice invoice)
+    {
+        if (invoice.IsEmpty)
+        {
+            return;
+        }
+    }
+}
+```
+
+## Naming
+
+| Member | Style | Example |
+|--------|-------|---------|
+| Public / protected members | `PascalCase` | `TotalAmount` |
+| Private instance fields | `_camelCase` | `_clock` |
+| `const` fields (any accessibility) | `PascalCase` | `MaxRetries` |
+| Locals, parameters | `camelCase` | `invoiceId` |
+
+```csharp
+public sealed class RetryPolicy
+{
+    private const int MaxRetries = 3;
+    private readonly TimeProvider _clock;
+
+    public RetryPolicy(TimeProvider clock)
+    {
+        _clock = clock;
+    }
+}
+```
+
+## Language usage
+
+- Use `var` when the type is apparent from the right-hand side.
+- No `this.` qualifier unless it is necessary to disambiguate.
+- Classes are `sealed` by default. Unseal only for a concrete need.
+- Use `record` for messages, DTOs and value objects.
+- Nullable reference types are enabled in every project.
+
+```csharp
+var items = new List<InvoiceLine>();      // type is apparent
+IReadOnlyList<InvoiceLine> lines = items; // type is not apparent, state it
+```
+
+## Documentation
+
+No XML docs. Names carry the meaning; if a member needs a comment to be understood, rename it.
+
+:::tip
+Use a comment only to explain *why* something non-obvious is done, never *what* it does.
+:::
+
+
+## Tooling
+
+`dotnet format` is enforced and CI rejects violations. Run it after editing `.cs` files.
+
+```powershell
+dotnet format MySolution.slnx --verify-no-changes
+```
+
+:::caution[Never modify `.editorconfig` to silence warnings]
+The `.editorconfig` defines the rules of the codebase. When it reports a naming or style violation, fix the code to match. Loosening the rule, lowering severity, or adding suppressions is not an acceptable fix.
+:::
+
+
+### Warnings as errors
+
+`TreatWarningsAsErrors` is on for all projects, set once in `Directory.Build.props`:
+
+```xml
+<Project>
+  <PropertyGroup>
+    <Nullable>enable</Nullable>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
+```
+
+The build must stay at 0 warnings.
+
+:::caution[Do not add `NoWarn`]
+Fix the cause of the warning. `NoWarn` and `#pragma warning disable` hide real problems and accumulate as debt.
+:::
+
+---
+
+## Type Design
+
+Choose the type kind by what the type is for. The defaults below keep types small, safe to share, and cheap to reason about.
+
+## Choosing a type kind
+
+| Purpose | Type |
+|---------|------|
+| Messages, DTOs, API models, persistence events | `sealed record` |
+| Small value objects passed around often | `readonly record struct` |
+| Mutable state owned by one component | `sealed class` |
+| Behavior with dependencies | `sealed class` |
+
+## Records for data
+
+```csharp
+public sealed record InvoiceCreated(
+    Guid InvoiceId,
+    string Customer,
+    IReadOnlyList<InvoiceLine> Lines);
+```
+
+Messages and DTOs carry immutable data. Use immutable or read-only collection types (`IReadOnlyList<T>`, `ImmutableArray<T>`) in their signatures.
+
+## Value objects
+
+Small, frequently passed values are `readonly record struct`. Equality and `with` come for free, and there is no heap allocation.
+
+```csharp
+public readonly record struct Money(decimal Amount, string Currency);
+
+public readonly record struct CustomerId(Guid Value);
+```
+
+:::tip
+Wrap primitive identifiers in a value object so `CustomerId` and `InvoiceId` cannot be swapped by accident.
+:::
+
+
+Use `readonly struct` (not `record struct`) when you need custom equality or no generated members. Keep structs small, ideally 16 bytes or less.
+
+## Seal everything
+
+Classes and records are `sealed` by default. Unseal only when you have a concrete, current need for a subclass.
+
+```csharp
+public sealed class PriceCalculator { }
+public sealed record OrderPlaced(Guid OrderId);
+```
+
+Sealed types are faster to dispatch, cannot be extended in ways you did not design for, and make the intent explicit.
+
+## Composition over inheritance
+
+Do not build inheritance hierarchies for domain types. Compose behavior from small collaborators instead.
+
+```csharp
+// Avoid
+public abstract class Document { }
+public class Invoice : Document { }
+public class CreditNote : Invoice { }
+
+// Prefer
+public sealed class Invoice
+{
+    private readonly ITaxPolicy _tax;
+    private readonly INumbering _numbering;
+
+    public Invoice(ITaxPolicy tax, INumbering numbering)
+    {
+        _tax = tax;
+        _numbering = numbering;
+    }
+}
+```
+
+:::caution
+A base class is a public contract with every future subclass. Prefer interfaces for polymorphism and records for data.
+:::
+
+
+## Mutable state classes
+
+State owned by a single-threaded component (for example an actor, whose mailbox serializes access) uses mutable collections directly. No locking or immutable copies are needed.
+
+```csharp
+public sealed class OrderState
+{
+    private readonly Dictionary<Guid, OrderLine> _lines = [];
+    private readonly HashSet<string> _tags = [];
+
+    public void Apply(LineAdded evt)
+    {
+        _lines[evt.LineId] = new OrderLine(evt.Sku, evt.Quantity);
+    }
+}
+```
+
+:::caution
+Mutable collections must never leave the owning component. Expose a snapshot as an immutable record instead.
+:::
+
+
+## No god classes
+
+When a class has too many responsibilities, split by concern, not by size. Line count is a symptom; mixed reasons to change are the cause.
+
+- One reason to change per class.
+- Extract collaborators for distinct concerns (validation, mapping, persistence, orchestration).
+- Do not create `Helper` or `Utils` classes as a dumping ground.
+
+---
+
+## Enum Conventions
+
+:::caution[High-priority rules]
+These rules are violated often and are costly to fix once values are stored or on the wire. Follow them exactly.
+:::
+
+
+## Every enum starts with `Unknown = 0`
+
+`default(T)` must be detectably "unset". Every new enum declares an explicit `Unknown = 0` member.
+
+```csharp
+public enum DownloadState
+{
+    Unknown = 0,
+    Queued = 1,
+    Running = 2,
+    Completed = 3
+}
+```
+
+Unrecognized external values then bind to `Unknown` instead of failing model binding with an automatic 400. API handlers reject `Unknown` explicitly with the protocol's own error, before mapping.
+
+## Persistence enums: explicit values on every member
+
+Every member of every persistence enum has an explicit `int` value. The values are a stored contract.
+
+```csharp
+public enum PersistedDownloadState
+{
+    Unknown = 0,
+    Queued = 1,
+    Running = 2,
+    Completed = 3,
+    Failed = 5   // gaps are fine; 4 was never used or was removed
+}
+```
+
+:::caution
+Never change, reuse, or reorder stored values. New members get a new, unused value.
+:::
+
+
+## Enum-to-enum mapping: exhaustive `switch`
+
+Map between enum types (API, message, persistence) with a `switch` expression that throws for everything unhandled, including `Unknown`.
+
+```csharp
+public static class DownloadStateMappingExtensions
+{
+    public static PersistedDownloadState ToPersistence(this DownloadState value) => value switch
+    {
+        DownloadState.Queued => PersistedDownloadState.Queued,
+        DownloadState.Running => PersistedDownloadState.Running,
+        DownloadState.Completed => PersistedDownloadState.Completed,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
+    };
+
+    public static PersistedDownloadState? ToPersistence(this DownloadState? value) =>
+        value?.ToPersistence();
+}
+```
+
+Nullable enums use null propagation at the call site: `x?.ToPersistence()`.
+
+:::tip
+Treat CS8509 (non-exhaustive switch) as an error, together with `TreatWarningsAsErrors`. Adding a member then breaks the build at every mapping that needs updating.
+:::
+
+
+## Anti-patterns
+
+```csharp
+// WRONG: numeric cast silently maps by position, breaks on any reorder
+var persisted = (PersistedDownloadState)(int)state;
+
+// WRONG: string conversion in a response record
+return new DownloadResponse(State: state.ToString());
+
+// WRONG: no Unknown member, default(T) looks like a valid value
+public enum Mode { Fast = 0, Slow = 1 }
+
+// WRONG: missing the throwing arm, unknown values map silently
+state switch { DownloadState.Queued => PersistedDownloadState.Queued, _ => default };
+```
+
+:::caution[Never convert between enum types with numeric casts]
+`(Target)(int)source` is forbidden everywhere. Always use a `switch` expression.
+:::
+
+
+## Serialization
+
+- API enums serialize as integers. Do not register a global `JsonStringEnumConverter`.
+- Use per-type string converters only where an external protocol requires string values.
+- Query parameters bind directly to the enum type.
+- Never put serialization attributes such as `[JsonStringEnumMemberName]` on message or persistence enums. Use them only on API enums where an external protocol requires it.
+
+## Dates and times in responses
+
+Keep rich types. Formatting is the serializer's job.
+
+```csharp
+// RIGHT
+public sealed record ScheduleResponse(DateTimeOffset StartsAt, TimeOnly DailyAt, DownloadState State);
+
+// WRONG
+new ScheduleResponse(StartsAt: start.ToString("o"), DailyAt: at.ToString("HH:mm"), State: state.ToString());
+```
+
+`DateTimeOffset` stays `DateTimeOffset`, `TimeOnly` stays `TimeOnly`, and response records never call `.ToString()` on enum values.
+
+---
+
+## Async Patterns
+
+Rules for asynchronous code, cancellation, time, and concurrency.
+
+## No blocking on async
+
+Never use `async void`, `.Result`, or `.Wait()`. They cause deadlocks and swallow or wrap exceptions.
+
+```csharp
+// WRONG
+public async void OnMessage(Message m) { await HandleAsync(m); }
+var result = client.GetAsync(url).Result;
+task.Wait();
+
+// RIGHT
+public async Task OnMessageAsync(Message m, CancellationToken ct)
+{
+    await HandleAsync(m, ct);
+}
+var result = await client.GetAsync(url, ct);
+```
+
+:::caution
+`async void` is acceptable only for UI event handlers, which this codebase does not have.
+:::
+
+
+## CancellationToken everywhere
+
+Accept a `CancellationToken` in every async method and pass it down the entire call chain.
+
+```csharp
+public async Task<Invoice> LoadAsync(Guid id, CancellationToken ct)
+{
+    var row = await _db.Invoices.SingleAsync(i => i.Id == id, ct);
+    return await _mapper.MapAsync(row, ct);
+}
+```
+
+Tests pass `TestContext.Current.CancellationToken` to every call that accepts a token (analyzer xUnit1051).
+
+```csharp
+[Fact]
+public async Task Loads_invoice()
+{
+    var ct = TestContext.Current.CancellationToken;
+    var invoice = await _service.LoadAsync(id, ct);
+    Assert.Equal(id, invoice.Id);
+}
+```
+
+## TimeProvider, not DateTime
+
+Inject `TimeProvider`. Never read `DateTime.Now` or `DateTime.UtcNow` directly. This makes time-dependent logic deterministic in tests.
+
+```csharp
+public sealed class ExpiryChecker
+{
+    private readonly TimeProvider _clock;
+
+    public ExpiryChecker(TimeProvider clock)
+    {
+        _clock = clock;
+    }
+
+    public bool IsExpired(DateTimeOffset expiresAt) => _clock.GetUtcNow() >= expiresAt;
+}
+```
+
+In tests, use `FakeTimeProvider` and call `Advance(...)` instead of sleeping.
+
+## No ContinueWith in actor code
+
+`Task.ContinueWith()` bypasses the actor's threading guarantees and may run on any thread. Use `PipeTo` with explicit success and failure mappings instead.
+
+```csharp
+// WRONG
+_client.FetchAsync(url).ContinueWith(t => new Fetched(t.Result));
+
+// RIGHT
+_client.FetchAsync(url, ct).PipeTo(
+    Self,
+    success: body => new Fetched(body),
+    failure: ex => new FetchFailed(ex));
+```
+
+:::tip
+Define your own `XxxFailed(Exception Cause)` message rather than relying on framework failure wrappers.
+:::
+
+
+## ConfigureAwait
+
+Follow the project default. Do not sprinkle `ConfigureAwait(false)` on individual awaits.
+
+- Application code (ASP.NET Core, workers, actors) has no synchronization context, so it has no effect.
+- Libraries intended for general reuse may set it consistently, enforced by an analyzer, never ad hoc.
+
+## Structured concurrency
+
+Prefer higher-level primitives over manual `Task` management.
+
+| Need | Use |
+|------|-----|
+| Producer/consumer, buffering, back-pressure | `System.Threading.Channels` |
+| Stateful entities, serialized access | Actors |
+| Parallel I/O with a bound | `Parallel.ForEachAsync` with `MaxDegreeOfParallelism` |
+
+```csharp
+var channel = Channel.CreateBounded<Job>(capacity: 100);
+
+await foreach (var job in channel.Reader.ReadAllAsync(ct))
+{
+    await ProcessAsync(job, ct);
+}
+```
+
+:::caution
+Avoid fire-and-forget `Task.Run` and unobserved tasks. Every task must be awaited, piped, or owned by a component that observes its failure.
+:::
+
+---
+
+# Akka.NET
+
+---
+
+## Actor Design Conventions
+
+Actors are **thin plumbing**: message routing, persistence hooks and lifecycle. Domain logic and mutable domain state live elsewhere (see [State Management](state-management)).
+
+## Naming
+
+| Suffix | Meaning |
+|--------|---------|
+| `*Manager` | Cluster Singleton |
+| `*Worker` | Sharded entity or local entity region entity |
+| `*Actor` | Everything else: pools, plain actors, children |
+
+```csharp
+public sealed class DownloadManager : ReceiveActor { }   // singleton
+public sealed class DownloadWorker : ReceiveActor { }    // sharded entity
+public sealed class ScoringActor : ReceiveActor { }      // pooled child
+```
+
+## Thin actors
+
+An actor receives a message, delegates to its state object, and sends a reply. Nothing else.
+
+```csharp
+public sealed class CounterWorker : ReceiveActor
+{
+    private readonly CounterState _state = CounterState.Empty;
+
+    public CounterWorker()
+    {
+        Receive<Increment>(cmd =>
+        {
+            _state.Apply(cmd);
+            Sender.Tell(new IncrementCompleted(_state.Value));
+        });
+        Receive<QueryCounter>(_ => Sender.Tell(_state.GetSnapshot()));
+    }
+}
+```
+
+:::tip[Prefer one Receive block over many tiny handlers]
+Keep actors simple. One constructor with a flat list of `Receive<T>` registrations
+is easier to read than eight `HandleXyz` methods that each need a jump to understand.
+Extract a method only when it is genuinely reused or hides real complexity.
+:::
+
+
+## Dependency injection and actor resolution
+
+Use `resolver.Props<T>()` when an actor needs DI dependencies. Resolve other actors at runtime with `context.GetActor<T>()`.
+
+```csharp
+// Creating
+var props = resolver.Props<ScoringActor>();
+
+// Resolving a peer
+var manager = Context.GetActor<DownloadManager>();
+manager.Tell(new EnqueueDownload(id));
+```
+
+:::caution[Never pass `IActorRef` as a constructor parameter]
+Actor refs injected through constructors are fixed at construction, break on restart
+and hide the topology. Resolve through the registry or `Context` instead.
+:::
+
+
+## Async work: PipeTo, not ContinueWith
+
+`Task.ContinueWith` bypasses Akka's threading guarantees. Use `PipeTo` with both `success:` and `failure:`.
+
+```csharp
+// Wrong
+_client.FetchAsync(cmd.Url).ContinueWith(t => Self.Tell(t.Result));
+
+// Right
+_client.FetchAsync(cmd.Url, ct)
+    .PipeTo(Self,
+        success: r => new FetchCompleted(r),
+        failure: ex => new FetchFailed(ex));
+```
+
+## Failures are project-owned messages
+
+Never use Akka's `Status.Failure`. Define a failure record per operation.
+
+```csharp
+public sealed record FetchFailed(Exception Cause);
+```
+
+:::caution[No `Status.Failure`]
+It is untyped, cannot be matched to the operation that failed and invites catch-all handlers.
+Every `PipeTo` must supply a `failure:` projection to an `XxxFailed` record.
+:::
+
+
+## No EventStream
+
+Do not use `EventStream.Publish` or `Subscribe`. Communication goes through explicit actor references (Tell/Ask via registry or `Context.GetActor<T>()`). Explicit wiring is traceable, testable with `TestProbe`, and does not leak messages between unrelated components.
+
+## Checklist
+
+- [ ] Name matches role (`Manager`, `Worker`, `Actor`)
+- [ ] State in its own `<Actor>State.cs` class
+- [ ] No `IActorRef` constructor parameters
+- [ ] No `ContinueWith`, `Status.Failure`, `EventStream`
+- [ ] Every `PipeTo` has `success:` and `failure:`
+
+---
+
+## Actor State Pattern
+
+The "Pathfinder pattern": all mutable domain state lives in a dedicated state class. The actor only routes messages and calls `Apply`.
+
+## Rules
+
+1. State is a `sealed class` in its own `<Actor>State.cs` file. Not a record, not nested in the actor.
+2. Mutable collections (`List<T>`, `Dictionary<K,V>`, `HashSet<T>`) are fine. Akka's single-threaded mailbox guarantees safe mutation.
+3. Every public mutation method is named `Apply`, overloaded by parameter type. Never `ApplyFoo` / `ApplyBar`.
+4. For primitives or multiple values, add a small wrapper record next to the state class and use `Apply(WrapperRecord)`.
+5. `Empty` is a property, never a shared static field.
+6. State is never sent to callers. Use `GetSnapshot()` to produce a response record and `FromSnapshot()` to reconstruct.
+7. Persistent actors add `GetPersistenceState()` and `FromPersistence()`.
+8. No domain fields on the actor (dictionaries, flags, counters). Infrastructure refs (actor refs, `CancellationTokenSource`, stopwatches) may stay on the actor.
+
+## Correct
+
+```csharp
+public sealed class CartState
+{
+    private readonly Dictionary<Guid, int> _items = new();
+    public bool CheckedOut { get; private set; }
+
+    public static CartState Empty => new();
+
+    public void Apply(ItemAdded evt) =>
+        _items[evt.ProductId] = _items.GetValueOrDefault(evt.ProductId) + evt.Quantity;
+
+    public void Apply(CheckedOut _) => CheckedOut = true;
+
+    // wrapper record for multiple values
+    public void Apply(QuantityChange change) => _items[change.ProductId] = change.Quantity;
+
+    public CartSnapshot GetSnapshot() => new(_items.ToImmutableDictionary(), CheckedOut);
+
+    public static CartState FromSnapshot(CartSnapshot s)
+    {
+        var state = new CartState { CheckedOut = s.CheckedOut };
+        foreach (var (id, qty) in s.Items) state._items[id] = qty;
+        return state;
+    }
+}
+
+public sealed record QuantityChange(Guid ProductId, int Quantity);
+```
+
+## Persistent variant
+
+```csharp
+public PersistedCartState GetPersistenceState() => new(_items.ToDictionary(), CheckedOut);
+
+public static CartState FromPersistence(PersistedCartState p)
+{
+    var state = new CartState { CheckedOut = p.CheckedOut };
+    foreach (var (id, qty) in p.Items) state._items[id] = qty;
+    return state;
+}
+```
+
+See [Persistence](persistence) for how these hook into `Persist` and `SaveSnapshot`.
+
+## Anti-patterns
+
+:::caution[Leaked state on the actor]
+```csharp
+public sealed class CartActor : ReceiveActor
+{
+    private readonly Dictionary<Guid, int> _items = new(); // domain state on actor
+    private bool _checkedOut;                              // flag on actor
+    private int _retries;                                  // counter on actor
+}
+```
+The actor now owns domain logic that cannot be unit-tested without an `ActorSystem`.
+:::
+
+
+:::caution[Misnamed or nested state]
+```csharp
+public sealed class CartActor
+{
+    private sealed record State(ImmutableList<Item> Items);   // nested record
+}
+
+public sealed class CartState
+{
+    public void ApplyItemAdded(ItemAdded e) { }   // not named Apply
+    public void ApplyCheckedOut() { }
+    public static readonly CartState Empty = new(); // shared mutable instance
+}
+```
+A shared static `Empty` is a mutable instance reused across actors: one actor's mutation corrupts the next.
+:::
+
+
+:::caution[Sending state to callers]
+```csharp
+Receive<QueryCart>(_ => Sender.Tell(_state)); // caller now holds a mutable reference
+```
+Reply with `_state.GetSnapshot()` instead.
+:::
+
+
+:::tip[Why a class and not a record?]
+The state mutates in place and is touched only from the actor's mailbox. Records with
+`with` expressions allocate on every event and encourage leaking immutable-looking
+copies that are never actually shared.
+:::
+
+
+## Testing benefit
+
+State classes are plain objects. Test them directly without an actor system:
+
+```csharp
+[Fact]
+public void Apply_ItemAdded_AccumulatesQuantity()
+{
+    var state = CartState.Empty;
+    state.Apply(new ItemAdded(id, 2));
+    state.Apply(new ItemAdded(id, 3));
+    Assert.Equal(5, Assert.Single(state.GetSnapshot().Items).Value);
+}
+```
+
+---
+
+## Message Conventions
+
+## Naming
+
+| Kind | Name | Response |
+|------|------|----------|
+| Command | `VerbNoun` (`SearchSeries`, `AddDownload`) | `abstract record VerbNounResponse` with `VerbNounCompleted` / `VerbNounFailed` |
+| Query | `QueryNoun` (`QueryRuleSetDetail`) | `abstract record NounResponse` with `NounResult` / `NounFailed` |
+| Event (persistence) | Past tense (`ScoringRecorded`) | none |
+| Config | Noun (`MatchingConfig`) | none, fire-and-forget |
+
+## Command with responses
+
+Command and its responses live in one file.
+
+```csharp
+// AddDownload.cs
+public sealed record AddDownload(Guid DownloadId, Uri Source) : IWithDownloadId;
+
+public abstract record AddDownloadResponse;
+public sealed record AddDownloadCompleted(Guid DownloadId) : AddDownloadResponse;
+public sealed record AddDownloadFailed(Exception Cause) : AddDownloadResponse;
+```
+
+## Query with responses
+
+```csharp
+// QueryRuleSetDetail.cs
+public sealed record QueryRuleSetDetail(string RuleSetId) : IWithRuleSetId;
+
+public abstract record RuleSetDetailResponse;
+public sealed record RuleSetDetailResult(RuleSetDetail Detail) : RuleSetDetailResponse;
+public sealed record RuleSetDetailFailed(Exception Cause) : RuleSetDetailResponse;
+```
+
+Callers switch exhaustively on the response:
+
+```csharp
+var response = await actor.Ask<AddDownloadResponse>(cmd, timeout, ct);
+return response switch
+{
+    AddDownloadCompleted ok => Results.Ok(ok.DownloadId),
+    AddDownloadFailed f     => Results.Problem(f.Cause.Message),
+    _ => throw new InvalidOperationException()
+};
+```
+
+:::caution[No domain-wide response interfaces]
+Each command and query owns its response hierarchy. Do not introduce `IDownloadResponse`
+or a shared `Result<T>` base across a domain. Shared response types couple unrelated
+operations and make exhaustive matching meaningless.
+:::
+
+
+## Events and config
+
+```csharp
+// Persistence project, past tense
+public sealed record ScoringRecorded(Guid ScoringId, int Score, DateTimeOffset At);
+
+// Config: noun, fire-and-forget (Tell, no response)
+public sealed record MatchingConfig(int MinimumScore, TimeSpan Timeout);
+```
+
+## Entity ID interfaces
+
+Three layers, bottom-up:
+
+| Interface | Member | Purpose |
+|-----------|--------|---------|
+| `IWithId` | `Guid Id` | Generic Guid identity |
+| `IWithEntityId` | `string EntityId` | Routing key used by message extractors |
+| `IWith*Id` | domain-typed property | The access point used in code |
+
+Each `IWith*Id` inherits the lower layers and supplies default interface implementations. `Id` and `EntityId` are explicit implementations: invisible on the message, reachable only by cast, which only extractors do.
+
+```csharp
+public interface IWithDownloadId : IWithId, IWithEntityId
+{
+    Guid DownloadId { get; }
+    Guid IWithId.Id => DownloadId;
+    string IWithEntityId.EntityId => DownloadId.ToString();
+}
+
+public interface IWithRuleSetId : IWithEntityId
+{
+    string RuleSetId { get; }
+    string IWithEntityId.EntityId => RuleSetId;
+}
+
+public sealed record InitDownload(Guid DownloadId, Uri Source) : IWithDownloadId;
+```
+
+### One `IWith*Id` per region
+
+Each interface is a **routing address**, not a data type. Two regions with different purposes get separate interfaces even if the ID value is identical.
+
+:::tip
+`IWithRuleSetId` routes to `RuleSetWorker`. `IWithHistoryId` routes to `HistoryWorker`.
+Both carry a ruleset ID string but are separate routing contracts.
+:::
+
+
+:::tip[Exception: domain-internal correlation]
+Inside one domain, a single `IWith*Id` may span several regions when the ID correlates
+one multi-actor flow (e.g. `IWithSearchId` across search and evaluation workers).
+Sharing across domains is never allowed.
+:::
+
+
+## File organization
+
+- One file per command or query, including its responses.
+- Events and persisted state live in the persistence project (see [Persistence](persistence)).
+
+---
+
+## Persistence Conventions
+
+Three tools, each with exactly one job.
+
+| Tool | Job |
+|------|-----|
+| `Persist(evt, callback)` | Write the event to the journal. Stashes incoming commands until the callback runs. State update goes in the callback. |
+| `DeferAsync(evt, callback)` | Run the callback **after all preceding Persist handlers complete**. Persists nothing; `evt` is not journaled or replayed. |
+| `SaveSnapshot(state)` | Compact recovery for unbounded-growth actors. Interval-based. |
+
+## Persist
+
+```csharp
+private void HandlePause(PauseCmd cmd)
+{
+    var evt = new PersistedPaused(cmd.Id, At: _time.GetUtcNow());
+    Persist(evt, e =>
+    {
+        _state.Apply(e);
+        Sender.Tell(new PauseCompleted());   // inline: single reply
+    });
+}
+```
+
+`Sender` is preserved inside `Persist` callbacks, so no `var sender = Sender` capture is needed (unlike `PersistAsync`).
+
+## DeferAsync
+
+Use when side effects are non-trivial **and** the handler does not call `Persist`/`PersistAll` itself:
+
+- starting external processes or HTTP calls
+- fan-out to two or more actors
+- sending a response after nested Persists
+
+```csharp
+private const int SnapshotInterval = 10;
+
+private void HandleCreate(CreateCmd cmd)
+{
+    Persist(new PersistedCreated(cmd.Id), e =>
+    {
+        _state.Apply(e);
+        if (LastSequenceNr % SnapshotInterval == 0)
+            SaveSnapshot(_state.GetPersistenceState());
+    });
+    DeferAsync("notify", _ =>
+    {
+        _manager.Tell(_state.GetRegistryUpdate());
+        Sender.Tell(new CreateCompleted(_state.Id));
+    });
+}
+```
+
+:::caution[CRITICAL: never DeferAsync around a handler that persists]
+If the handler calls `DispatchNext` or any method that calls `Persist`/`PersistAll`,
+do **not** wrap it in `DeferAsync`. `PersistAll` inside `DeferAsync` breaks the event
+batch pipeline: the inner events never reach the journal. Keep everything inline in
+the outer Persist callback.
+:::
+
+
+Inline in the Persist callback is fine for a single `Sender.Tell`, logging, and metrics counters.
+
+## Snapshots
+
+- Only for unbounded-growth actors (singletons, long-lived entities). Short-lived entities with a handful of events need none.
+- Interval-based: `LastSequenceNr % SnapshotInterval == 0`.
+- Always snapshot the persistence DTO: `SaveSnapshot(_state.GetPersistenceState())`, never `SaveSnapshot(_state)`.
+
+:::caution[Never snapshot unconditionally]
+`SaveSnapshot` in every Persist callback doubles I/O per command.
+:::
+
+
+## PersistenceId
+
+Singletons use a literal. Entities use a prefix plus the entity ID via the C# 14 `field` keyword: the getter adds the prefix, the constructor assigns the raw ID.
+
+```csharp
+// Singleton
+public override string PersistenceId => "feed-crawl";
+
+// Entity
+public override string PersistenceId => $"download-{field}";
+// constructor:
+public DownloadWorker(string entityId) { PersistenceId = entityId; }
+```
+
+## Persistence DTOs
+
+Live in a dedicated persistence project, separate from message types.
+
+- **Extend-only records.** Add members; never remove or change existing ones.
+- **No `Event`/`Dto` suffix:** `PersistedPaused`, `PersistedDownloadState`.
+- **Explicit `int` values on every enum**, starting at 0. Never change, reuse or reorder.
+- No serialization attributes on shared enums, no custom serializers.
+
+```csharp
+public enum PersistedSearchSource
+{
+    Unknown = 0,
+    Api = 1,
+    Manual = 2,
+    Feed = 4      // gaps are fine; 3 stays retired
+}
+```
+
+## Mapping
+
+Conversion between domain messages and persistence DTOs lives in the **domain project** as `*MappingExtensions.cs`. The shared core references both sides but contains no mapping logic.
+
+```csharp
+public static class DownloadMappingExtensions
+{
+    public static PersistedDownloadStatus ToPersistence(this DownloadStatus s) => s switch
+    {
+        DownloadStatus.Queued => PersistedDownloadStatus.Queued,
+        DownloadStatus.Done   => PersistedDownloadStatus.Done,
+        _ => throw new ArgumentOutOfRangeException(nameof(s), s, null)
+    };
+}
+```
+
+Enum conversion uses exhaustive `switch` expressions, never numeric casts.
+
+---
+
+## Akka.Streams Discipline
+
+:::caution[Most frequently violated page]
+These rules are the ones broken and corrected most often. Read them before writing any stream.
+:::
+
+
+## Rules
+
+### 1. No context access in streams
+
+Streams run on different threads than the actor's mailbox. Never touch actor fields, `Context`, `Sender`, or any mutable state from inside a stream lambda. Pass everything the stream needs as parameters when building the graph.
+
+### 2. Flat pipelines
+
+One flat `Source -> Flow -> Sink`. No streams inside streams, no nested `RunAsync` inside a stage.
+
+### 3. No PipeTo inside streams
+
+`PipeTo` belongs at the actor level, applied to the materialized result, not inside stages.
+
+### 4. Use the built-in Ask stage
+
+Use `.Ask<T>(actor, timeout)` rather than `SelectAsync(1, async x => await actor.Ask<T>(x))`. It handles parallelism, timeouts and failure propagation correctly.
+
+### 5. No ContinueWith
+
+Same as in actors: use `PipeTo` with `success:` and `failure:`.
+
+### 6. No static helpers or custom GraphStages
+
+Keep logic in the lambda. If it is too complex, it belongs in a service injected via DI, not a static helper or a hand-written stage.
+
+### 7. No external state mutation
+
+Side effects go into `DivertTo` / `WireTap` side channels, not into `Select`/`SelectAsync` lambdas that mutate outside variables.
+
+### 8. Streams do not die in normal operation
+
+If a stream terminates unexpectedly, find the root cause. Do not paper over it with restart logic.
+
+## Correct pipeline
+
+Everything the stream needs is passed in at build time. The actor only materializes and pipes the result.
+
+```csharp
+public sealed class HarvestActor : ReceiveActor
+{
+    public HarvestActor(IFeedSource source, IActorRef store, IMaterializer mat)
+    {
+        // Resolved on the mailbox thread, captured as plain values
+        var storeRef = store;
+
+        Receive<StartHarvest>(cmd =>
+        {
+            var done = source.Items(cmd.FeedUrl)                       // Source<RawItem>
+                .Select(item => item.Normalize())                       // pure
+                .DivertTo(
+                    Sink.ForEach<RawItem>(_ => { }),                    // rejected -> side channel
+                    item => item.IsRejected)
+                .Ask<StoreResponse>(storeRef, TimeSpan.FromSeconds(5), parallelism: 4)
+                .RunWith(Sink.Ignore<StoreResponse>(), mat);
+
+            done.PipeTo(Self,
+                success: () => new HarvestCompleted(cmd.FeedUrl),
+                failure: ex => new HarvestFailed(ex));
+        });
+    }
+}
+```
+
+## Hall of shame
+
+:::caution[Context access inside a stage]
+```csharp
+.Select(x => { _counter++; Sender.Tell(x); return x; })   // actor fields + Sender
+```
+:::
+
+
+:::caution[Stream in a stream]
+```csharp
+.SelectAsync(1, async x =>
+    await Source.From(x.Children).RunWith(Sink.Seq<Child>(), mat))   // nested RunWith
+```
+:::
+
+
+:::caution[Manual SelectAsync + Ask]
+```csharp
+.SelectAsync(1, async x => await store.Ask<StoreResponse>(x))
+```
+Use `.Ask<StoreResponse>(store, timeout)`.
+:::
+
+
+:::caution[PipeTo and ContinueWith in a stage]
+```csharp
+.SelectAsync(1, x => Save(x).ContinueWith(t => t.Result))
+.Select(x => { Save(x).PipeTo(Self); return x; })
+```
+:::
+
+
+:::caution[Static helper or custom stage]
+```csharp
+.Select(x => FeedHelpers.ParseAndMerge(x))     // static helper
+.Via(new MyCustomGraphStage())                 // hand-rolled stage
+```
+Inject an `IItemParser` service and call it in the lambda.
+:::
+
+
+:::caution[Mutating outside state]
+```csharp
+var seen = new HashSet<string>();
+.Select(x => { seen.Add(x.Id); return x; })    // shared mutable state across threads
+```
+Use `StatefulSelectMany`, `Sliding`, `GroupBy`, or a `WireTap` to a sink that owns the state.
+:::
+
+
+:::caution[Restart-on-failure as a fix]
+```csharp
+RestartSource.OnFailuresWithBackoff(() => flakySource, settings)   // hides the real bug
+```
+A source that dies repeatedly has a root cause. Fix it.
+:::
+
+
+## Review checklist
+
+- [ ] Lambdas reference only parameters and injected services
+- [ ] Single flat graph, one materialization
+- [ ] `.Ask<T>()` stage, no manual `SelectAsync` + `Ask`
+- [ ] `PipeTo` only on the materialized `Task`
+- [ ] Side effects via `DivertTo` / `WireTap`
+- [ ] No restart wrapper masking failures
+
+---
+
+## Cluster & Sharding
+
+Three hosting shapes, each with a fixed naming convention.
+
+| Shape | Suffix | Routing | Persistence |
+|-------|--------|---------|-------------|
+| Cluster Singleton | `*Manager` | one instance per cluster | literal `PersistenceId` |
+| Shard Region | `*Worker` | entity ID via message extractor | `prefix-{entityId}` |
+| Local Entity Region | `*Worker` | entity ID via `EntityIdExtractor`, node-local | `prefix-{entityId}` |
+
+## Cluster Singletons
+
+Use for coordinators that must exist exactly once: schedulers, registries, orchestrators. Name them `*Manager`. If persistent, use a literal PersistenceId.
+
+```csharp
+public sealed class DownloadManager : ReceivePersistentActor
+{
+    public override string PersistenceId => "download-manager";
+}
+```
+
+## Shard Regions
+
+Use for entities that must be distributed across nodes. Name them `*Worker`. Routing is based on the entity ID that messages expose through `IWithEntityId` (see [Messaging](messaging)).
+
+```csharp
+builder.WithShardRegion<DownloadWorker>(
+    typeName: "download",
+    entityPropsFactory: (_, _, resolver) => id => resolver.Props<DownloadWorker>(id),
+    messageExtractor: new ShardMessageExtractor(),
+    shardOptions: new ShardOptions
+    {
+        PassivateIdleEntityAfter = TimeSpan.FromMinutes(5)
+    });
+```
+
+## Local Entity Regions
+
+Same entity pattern as sharding (ID-based routing, passivation, message extractor) but local to the node. Use for request-scoped or short-lived entities that do not need cluster distribution. Entities self-passivate after finishing their work.
+
+```csharp
+builder.WithEntityRegion<SearchWorker, SearchKey>(...);   // EntityIdExtractor works with IWithEntityId
+```
+
+Because the protocol matches cluster sharding, an entity can migrate between the two without code changes.
+
+## Passivation
+
+:::caution[Choose the mechanism by region type]
+- **Cluster sharding:** configure `ShardOptions { PassivateIdleEntityAfter = ... }` in the setup container.
+  Never use `Context.SetReceiveTimeout` plus a manual `Passivate` inside a sharded entity.
+- **Local entity regions:** the entity signals completion with a `Passivate` message to its parent.
+  `EntityRegionOptions.PassivationTimeout` is only a safety net for stuck entities.
+:::
+
+
+```csharp
+// Local region entity, done with its work
+Receive<WorkFinished>(_ =>
+{
+    Sender.Tell(new WorkCompleted());
+    Context.Parent.Tell(new Passivate(PoisonPill.Instance));
+});
+```
+
+## Routing interfaces
+
+- One `IWith*Id` per region. Each interface is a routing address, not a data type.
+- Two regions with different purposes get separate interfaces even if the ID value is the same.
+- Domain-internal exception: one `IWith*Id` may span several regions of the same domain when it correlates a single multi-actor flow.
+
+:::caution[Cross-domain sharing is never allowed]
+Domains talk through messages. A routing interface shared between domains couples them
+at the type level and defeats domain isolation.
+:::
+
+
+## Choosing a shape
+
+:::tip[Decision guide]
+- Exactly one instance, coordinates others: **Manager (singleton)**
+- Many independent entities, must survive node loss: **Worker in a shard region**
+- Many short-lived entities tied to a single node's request: **Worker in a local entity region**
+- Fixed-size parallel compute without identity: **`*Actor` in a pool** (not an entity region)
+:::
+
+
+## Singleton caveats
+
+- A singleton is a potential bottleneck. Keep it thin and delegate work to workers.
+- During handover the singleton restarts on another node, so state must be recoverable (persistence or re-derivable).
+- Child actors of a singleton are created at runtime through `Context.GetActor<T>()` or `ResolveChildActor<T>()`, not via constructor-injected refs.
+
+---
+
+## Supervision Strategies
+
+Supervision decides what happens when a child actor throws. Defaults are good; deviate deliberately.
+
+## Default behavior
+
+| Exception | Directive |
+|-----------|-----------|
+| `ActorInitializationException` | Stop |
+| `ActorKilledException` | Stop |
+| `DeathPactException` | Stop |
+| Any other `Exception` | Restart |
+
+For most actors this is correct. Do not add a strategy unless the default is wrong for your case.
+
+## BackoffOnFailure for persistent actors
+
+A persistent actor that fails during recovery or while writing will restart immediately and hammer the journal. Wrap it in a backoff supervisor so restarts are spaced out with jitter.
+
+```csharp
+var props = resolver.Props<DownloadManager>()
+    .BackoffOnFailure(
+        childName: "download-manager",
+        minBackoff: TimeSpan.FromSeconds(3),
+        maxBackoff: TimeSpan.FromSeconds(30),
+        randomFactor: 0.2);
+```
+
+:::tip[Why backoff]
+Journal outages are usually transient. Immediate restarts create a restart storm that
+keeps the database overloaded. Exponential backoff with jitter lets it recover and
+prevents many actors from retrying in lockstep.
+:::
+
+
+## Custom SupervisorStrategy
+
+Override only when the default does not fit, for example a parent managing children that wrap flaky external resources.
+
+```csharp
+protected override SupervisorStrategy SupervisorStrategy() =>
+    new OneForOneStrategy(
+        maxNrOfRetries: 3,
+        withinTimeRange: TimeSpan.FromMinutes(1),
+        decider: Decider.From(ex => ex switch
+        {
+            HttpRequestException => Directive.Restart,
+            ArgumentException    => Directive.Stop,     // bad input will never succeed
+            _                    => Directive.Escalate
+        }));
+```
+
+- `OneForOneStrategy`: only the failing child is affected (the usual choice).
+- `AllForOneStrategy`: all siblings restart together; use only when children share inseparable state.
+- Always bound retries (`maxNrOfRetries` + `withinTimeRange`), otherwise a poison message loops forever.
+
+## Escalation
+
+`Directive.Escalate` hands the decision to the parent's supervisor. Use it for exceptions the current parent has no business handling.
+
+```csharp
+decider: Decider.From(ex => ex switch
+{
+    TransientIoException => Directive.Restart,
+    _ => Directive.Escalate     // unknown: let the grandparent decide
+});
+```
+
+:::tip[Escalation chain]
+`Worker` fails with an unknown error, `Manager` escalates, the root guardian
+restarts or stops the subtree. The further up it travels, the larger the blast radius,
+so escalate only genuinely unexpected failures.
+:::
+
+
+## Never suppress errors
+
+:::caution[Find the root cause]
+- Do not catch and swallow exceptions inside `Receive` handlers to "keep the actor alive".
+- Do not use `Directive.Resume` to ignore failures; it keeps corrupted state running.
+- Do not wrap everything in a restart-forever policy to hide a bug.
+
+A crash is information. Let it surface, log it with context, fix the cause.
+:::
+
+
+Prefer typed failure messages for expected failures, and exceptions for unexpected ones:
+
+```csharp
+// Expected, recoverable: model it
+_client.FetchAsync(url, ct)
+    .PipeTo(Self, success: r => new FetchCompleted(r), failure: ex => new FetchFailed(ex));
+
+// Unexpected invariant violation: throw and let supervision handle it
+Receive<Apply>(cmd => _state.Apply(cmd) /* throws on corrupt input */);
+```
+
+## Guidelines
+
+- Persistent actors: BackoffOnFailure.
+- Pools and routers: use the router's own strategy, rarely customized.
+- Custom strategies: rare, documented with a comment explaining why the default fails.
+- Escalate what you cannot handle; never swallow it.
+
+---
+
+# API Design
+
+---
+
+## Minimal API Endpoint Conventions
+
+Endpoints are thin transport adapters. They translate HTTP into a message, ask a domain actor, and translate the response back into an `IResult`.
+
+## File layout
+
+- One static class per feature area, named `{Feature}ApiEndpoints.cs`.
+- One extension method per class: `Map{Feature}Api(this WebApplication app)`.
+- Constants (timeouts, `JsonSerializerOptions`) are `private static readonly` fields. They are the only non-lambda content in the class.
+
+```csharp
+public static class DownloadsApiEndpoints
+{
+    private static readonly TimeSpan AskTimeout = TimeSpan.FromSeconds(10);
+
+    public static void MapDownloadsApi(this WebApplication app)
+    {
+        var group = app.MapGroup("/api/downloads");
+
+        group.MapGet("/", async (IActorRegistry registry, CancellationToken ct) =>
+        {
+            var manager = await registry.GetAsync<DownloadManager>(ct);
+            var response = await manager.Ask<QueryDownloadsResponse>(
+                new QueryDownloads(), AskTimeout, ct);
+
+            return response switch
+            {
+                DownloadsResult r => Results.Ok(r.ToApi()),
+                DownloadsFailed f => Results.Problem(f.Cause.Message),
+                _ => Results.StatusCode(StatusCodes.Status500InternalServerError)
+            };
+        });
+    }
+}
+```
+
+## Handlers are inline lambdas
+
+:::danger[No method group references]
+Handlers must be inline lambdas. `private static` handler methods and method group references (`MapGet("/", HandleList)`) are prohibited.
+:::
+
+
+If a lambda grows too large, the logic does not belong in the endpoint. Move it into the domain layer (actor, service) and keep the lambda a one-liner per step.
+
+## Lambda shape
+
+Every handler follows the same three steps:
+
+1. **Resolve** the actor from `IActorRegistry`.
+2. **Ask** with a message. Use `request.ToMessage()` / `request.ToCommand()` when mapping is needed.
+3. **Switch** on the response and return an `IResult`.
+
+:::caution
+No business logic and no multi-actor orchestration in the lambda body. If a request needs two actors, a domain-side coordinator owns that flow.
+:::
+
+
+The only non-inline code an endpoint may call is the mapping extensions, `IActorRegistry.GetAsync`, and `actor.Ask`.
+
+## Route paths
+
+| Rule | Example |
+|------|---------|
+| Groups use `/api/{feature}` | `/api/downloads` |
+| Plural for collections | `downloads`, `rulesets` |
+| Singular where natural | `system`, `setup`, `feed` |
+| Sub-resources use consistent nesting | `/queue/...`, `/history/...` |
+| Action on a resource | `POST /downloads/{id}/pause` |
+| Collection-level action | `POST /downloads/pause` |
+
+### Group root
+
+The root of a group uses `"/"`, never `""`.
+
+```csharp
+group.MapGet("/", ...);     // correct
+group.MapGet("", ...);      // wrong
+```
+
+## Exceptions
+
+Self-contained health probes (setup checks) may live directly in the endpoint when no domain actor is involved.
+
+## Checklist
+
+- [x] One class per feature, one `Map{Feature}Api` method
+- [x] Inline lambdas only
+- [x] Resolve, Ask, switch
+- [x] Exhaustive-style response switch with a failure arm
+- [x] Root route is `"/"`
+
+---
+
+## API Models & Mapping
+
+API models are a separate type world from domain messages. Mapping extensions are the explicit bridge between the two.
+
+## Folder layout
+
+```text
+Models/
+  Downloads/
+    AddDownloadRequest.cs
+    DownloadResponse.cs
+    DownloadStatus.cs
+  Feed/
+  Shared/
+    ErrorResponse.cs
+    OperationResult.cs
+Extensions/
+  DownloadsMappingExtensions.cs
+```
+
+- Request and response records live in `Models/{Feature}/` subfolders.
+- The namespace stays flat (`YourApp.Api.Models`). Subfolders are physical organization only.
+- Shared types (`ErrorResponse`, `OperationResult`, shared enums) live in `Models/Shared/`.
+- Enums live with the feature that owns them, not in a central `Enums.cs`.
+
+:::note[One role per file]
+A file contains either request records or response records, not both. The exception is a matched request/response pair for a single endpoint.
+:::
+
+
+## Enums over strings
+
+Request and response records use enum types for every known finite value. Never use `string` for a value from a known set.
+
+```csharp
+public enum DownloadStatus
+{
+    Unknown = 0,
+    Queued = 1,
+    Running = 2,
+    Completed = 3
+}
+
+public sealed record DownloadResponse(Guid Id, DownloadStatus Status, DateTimeOffset CreatedAt);
+```
+
+- Query parameters that represent enums bind directly as the enum type.
+- Never call `.ToString()` on an enum in a response record.
+- `DateTimeOffset` and `TimeOnly` stay typed. Do not format them as strings.
+- Only exception: values passed through 1:1 to an external API.
+
+:::tip[Unknown = 0]
+Start every new enum with `Unknown = 0`. Unrecognized input binds to `Unknown` instead of failing with an automatic 400, and handlers reject it explicitly before mapping.
+:::
+
+
+## Mapping extensions
+
+Mapping lives in `Extensions/{Feature}MappingExtensions.cs`.
+
+| Method | Direction |
+|--------|-----------|
+| `ToApi()` | domain to API model |
+| `ToMessage()` / `ToCommand()` | API request to domain message |
+
+```csharp
+public static class DownloadsMappingExtensions
+{
+    public static DownloadResponse ToApi(this DownloadSnapshot s) =>
+        new(s.Id, s.Status.ToApi(), s.CreatedAt);
+
+    public static DownloadStatus ToApi(this MessageDownloadStatus value) => value switch
+    {
+        MessageDownloadStatus.Queued => DownloadStatus.Queued,
+        MessageDownloadStatus.Running => DownloadStatus.Running,
+        MessageDownloadStatus.Completed => DownloadStatus.Completed,
+        _ => throw new ArgumentOutOfRangeException(nameof(value), value, null)
+    };
+}
+```
+
+### Enum mapping rules
+
+- Use exhaustive `switch` expressions with a `_ => throw new ArgumentOutOfRangeException(...)` arm.
+- Never convert between enum types with numeric casts (`(Target)(int)source`).
+- Nullable enums: `x?.ToApi()`.
+- A missing arm is a compile error when warnings are treated as errors.
+- `Unknown` is handled by the `_ => throw` arm, so handlers must reject it earlier.
+
+## Serialization
+
+API enums serialize as integers. Do not add a global `JsonStringEnumConverter` and do not put serialization attributes on domain message or persistence enums.
+
+---
+
+# Testing
+
+---
+
+## Testing Philosophy
+
+Tests exist to pin down behavior and catch regressions. They do not exist to
+satisfy a coverage number. Every convention on the following pages follows from
+this idea.
+
+## Test behavior, not coverage
+
+:::caution[A test that only checks "it didn't throw" is worse than no test]
+It executes code, raises the coverage figure, and proves nothing. It gives
+false confidence and makes later refactors look safe when they are not.
+:::
+
+```csharp
+// Bad: executes the code, asserts nothing about the outcome
+[Fact]
+public void Score_DoesNotThrow()
+{
+    var ex = Record.Exception(() => _engine.Score(input));
+    Assert.Null(ex);
+}
+
+// Good: pins the computed behavior
+[Fact]
+public void Score_TitleAndYearMatch_ReturnsFullScore()
+{
+    var result = _engine.Score(input);
+    Assert.Equal(100, result.Value);
+}
+```
+
+## Do not chase 100%
+
+Spend effort where bugs actually hide.
+
+| Test | Skip |
+|------|------|
+| Pure logic: scoring engines, parsers, validators, state machines | DI wiring and container registration |
+| Mapping correctness (domain <-> DTO, enum switches) | Configuration binding |
+| Edge cases in business rules (boundaries, empty input, ordering) | Trivial getters/setters and plain records |
+
+## Tests fail for the right reason
+
+When a test fails, the failure message alone should tell you what broke.
+
+- One logical behavior per test, named after that behavior.
+- Assert the exact expected value so the diff is meaningful.
+- Prefer `Assert.Equal(expected, actual)` over `Assert.True(...)` (see [Assertions](assertions)).
+- A test that can fail for several unrelated reasons is two tests.
+
+## Mutation testing reveals weak tests
+
+If a mutation tool can change `>` to `>=` and your suite stays green, the test
+does not check what you think it checks. Use [mutation testing](mutation-testing)
+on pure logic to find boundary conditions that no test pins down.
+
+## One test class per production class
+
+- `FooEngine` is tested by `FooEngineTests`, in the same relative folder.
+- No shared base test classes with inherited tests. Inherited tests hide what is
+  actually being run and make failures hard to trace.
+- Small shared helpers (builders, fixtures) are fine; shared *test cases* are not.
+
+## No `Thread.Sleep`
+
+Never wait for async or eventually-consistent state with a fixed delay. It is
+slow when the system is fast and flaky when it is slow.
+
+:::tip[Use bounded waits with descriptive failures]
+Use `AwaitAssert`, `TestProbe.ExpectMsg`, or an equivalent polling helper
+with an explicit timeout. When it times out, the failure message must say
+what was being waited for. Actor tests get this for free, see
+[Actor Testing](actor-testing).
+:::
+
+
+## Quality bar
+
+Reference point: a mature codebase of roughly 1200 tests across 11 test
+projects, all passing, all meaningful. No test exists just because a metric
+asked for one. If you cannot say what regression a test would catch, delete it.
+
+## Checklist
+
+- [ ] Does the test assert an observable outcome, not just absence of exceptions?
+- [ ] Would a plausible bug in the production code make it fail?
+- [ ] Is the failure message self-explanatory?
+- [ ] Is there one test class per production class, with no inherited test cases?
+- [ ] Are there zero `Thread.Sleep` or arbitrary delays?
+
+---
+
+## Assertion Conventions
+
+Patterns for xUnit assertions. The goal is failures that point at the cause and
+assertions that cannot pass vacuously.
+
+## Collections
+
+### Single element
+
+Use `Assert.Single` instead of indexing. It asserts the count and binds the element.
+
+```csharp
+var item = Assert.Single(results);
+Assert.Equal("Tatort", item.Title);
+```
+
+### Count guard before indexing
+
+When several elements are accessed by index, assert the count first. Otherwise a
+wrong count surfaces as an `ArgumentOutOfRangeException`.
+
+```csharp
+Assert.Equal(2, list.Count);
+Assert.Equal("a", list[0].Name);
+Assert.Equal("b", list[1].Name);
+```
+
+## Nullability
+
+### No `!.` in tests
+
+Do not use the null-forgiving operator to reach into nullable values. Assert
+non-null first, then access members cleanly.
+
+```csharp
+var entry = result.Entry;
+Assert.NotNull(entry);
+Assert.Equal("x", entry.Name);
+```
+
+:::note[Exception]
+XLinq `element.Attribute("x")!.Value` is accepted.
+:::
+
+
+### No vacuous assertions
+
+Once a value is already proven non-null and of the right type (for example by
+`ExpectMsg<T>()`), the next assertion must inspect actual content.
+`Assert.NotNull` as a guard before property assertions is still fine.
+
+```csharp
+var msg = probe.ExpectMsg<DownloadCompleted>();
+Assert.Equal(expectedId, msg.DownloadId);   // content, not another NotNull
+```
+
+## Values
+
+:::caution["Not null" and "not empty" are almost never enough]
+When behavior produces a concrete value (a string, a count, a computed
+field), assert that exact value.
+:::
+
+```csharp
+Assert.Equal("S01E02 - Pilot", name);        // good
+Assert.False(string.IsNullOrEmpty(name));    // weak
+```
+
+Prefer `Assert.Equal(expected, actual)` over `Assert.True(actual == expected)`;
+the failure message then shows both values.
+
+## Exceptions
+
+Capture the exception and inspect its fields, not only its type.
+
+```csharp
+var ex = Assert.Throws<ArgumentOutOfRangeException>(() => sut.Map(Kind.Unknown));
+Assert.Equal("value", ex.ParamName);
+Assert.Contains("Unknown", ex.Message);
+
+var asyncEx = await Assert.ThrowsAsync<InvalidOperationException>(() => sut.RunAsync());
+```
+
+## Mocks
+
+Specify exact arguments and call count (NSubstitute).
+
+```csharp
+files.Received(1).Delete(Arg.Is<string>(p => p.EndsWith("a.mkv")));
+files.DidNotReceive().Delete(Arg.Is<string>(p => p.EndsWith("b.mkv")));
+```
+
+"Was called" or "did not throw" is not a verification.
+
+## Types
+
+Use `exactMatch: false` to prove interface or base-type conformance instead of an
+unchecked cast.
+
+```csharp
+var handler = Assert.IsType<FooHandler>(obj);                   // exact type
+var conforming = Assert.IsType<IFoo>(obj, exactMatch: false);   // interface/base
+```
+
+## Grouped assertions
+
+Use `Assert.Multiple` for several assertions on the same object so one run
+reports every failure.
+
+```csharp
+Assert.Multiple(
+    () => Assert.Equal("Show", dto.Title),
+    () => Assert.Equal(3, dto.Season),
+    () => Assert.Equal(7, dto.Episode));
+```
+
+## Theories vs facts
+
+| Use | When |
+|-----|------|
+| `[Theory]` + `[InlineData]` / `[MemberData]` | Small input/output sweeps with the same shape |
+| Separate `[Fact]`s | Each case needs a large, distinct fixture (e.g. an embedded JSON payload) |
+
+A readable failure name beats DRY when fixtures are large.
+
+```csharp
+[Theory]
+[InlineData(0, false)]
+[InlineData(1, true)]
+[InlineData(100, true)]
+public void IsValid_Boundaries(int value, bool expected)
+    => Assert.Equal(expected, Validator.IsValid(value));
+```
+
+---
+
+## Actor Testing
+
+Conventions for testing Akka.NET actors. Examples assume xUnit.
+
+## Choosing a TestKit
+
+| Scenario | Use |
+|----------|-----|
+| Actor with DI dependencies, or resolved through the actor registry | `Akka.Hosting.TestKit` |
+| Simple actor with no DI | Classic `Akka.TestKit.Xunit` |
+| Pure state logic | No TestKit, see [State-only tests](#state-only-unit-tests) |
+
+## Register TestProbes in DI
+
+Actors resolve collaborators through the container or registry, so register
+probes there instead of passing actor refs through constructors.
+
+```csharp
+public sealed class DownloadManagerTests : Akka.Hosting.TestKit.TestKit
+{
+    private readonly TestProbe _scheduler;
+
+    public DownloadManagerTests() { _scheduler = CreateTestProbe("scheduler"); }
+
+    protected override void ConfigureAkka(AkkaConfigurationBuilder builder, IServiceProvider provider)
+    {
+        builder.WithActors((system, registry) =>
+        {
+            registry.Register<DownloadScheduler>(_scheduler);
+            var props = DependencyResolver.For(system).Props<DownloadManager>();
+            registry.Register<DownloadManager>(system.ActorOf(props, "manager"));
+        });
+    }
+}
+```
+
+## State-only unit tests
+
+If actor state lives in its own class with `Apply(event)` methods, test that class
+directly. No actor system, no timing, fast and deterministic.
+
+```csharp
+[Fact]
+public void Apply_Paused_SetsPausedFlag()
+{
+    var state = DownloadState.Empty;
+    state.Apply(new Paused(Id));
+    Assert.True(state.IsPaused);
+}
+```
+
+Cover `GetSnapshot()` and persistence round-trips (`GetPersistenceState()` then
+`FromPersistence()`) the same way.
+
+## Interaction flows
+
+For multi-step flows, chain `ExpectMsg` calls on probes. Each call is a bounded
+wait and an assertion in one.
+
+```csharp
+manager.Tell(new AddDownload(id, url), TestActor);
+var added = ExpectMsg<AddDownloadCompleted>();
+Assert.Equal(id, added.DownloadId);
+
+var dispatched = _scheduler.ExpectMsg<WorkAvailable>();
+Assert.Equal(id, dispatched.DownloadId);
+_scheduler.ExpectNoMsg(TimeSpan.FromMilliseconds(200));
+```
+
+## Timeouts
+
+:::caution[Never use `Thread.Sleep` or `Task.Delay` to wait for an actor]
+Use `ExpectMsg`, `AwaitAssert`, or `ExpectNoMsg` with an explicit duration.
+Timeouts belong on asynchronous operations only; they bound the wait, they
+are not a way to "let things settle".
+:::
+
+
+```csharp
+AwaitAssert(() => Assert.Equal(3, store.Count), duration: TimeSpan.FromSeconds(5));
+```
+
+## Mocking rules
+
+- **Plain interfaces** (`IDataFiles`, `IHttpClientFactory`, clocks, stores): use
+  NSubstitute.
+- **Actors**: never mock. Use `TestProbe` or the real actor.
+
+```csharp
+var files = Substitute.For<IDataFiles>();
+files.Exists(Arg.Any<string>()).Returns(true);
+// ...
+files.Received(1).Exists(Arg.Is<string>(p => p.EndsWith("state.json")));
+```
+
+:::tip[Persistence]
+Use the in-memory journal and snapshot store for persistent actors, and
+recover by stopping and re-creating the actor with the same persistence id.
+:::
+
+---
+
+## Mutation Testing with Stryker.NET
+
+Mutation testing changes production code in small ways (`>` to `>=`, `+` to `-`,
+a removed statement) and re-runs the tests. A mutant that survives means no test
+noticed the change.
+
+## Setup
+
+Install Stryker.NET as a local tool so every developer and CI uses the same version.
+
+```bash
+dotnet new tool-manifest
+dotnet tool install dotnet-stryker
+```
+
+## What to target
+
+| Good targets (deterministic) | Avoid |
+|------------------------------|-------|
+| Scoring engines, parsers, validators | Actor tests: timing-sensitive, flaky mutations |
+| State classes (`Apply`) | Architecture tests: no production logic |
+| Mapping extensions | Persistence DTOs: extend-only records |
+| | Streams: timing-dependent |
+
+## Configuration
+
+One `stryker-config.json` per test project.
+
+```json
+{
+  "stryker-config": {
+    "project": "MyApp.Scoring.csproj",
+    "test-projects": ["../MyApp.Scoring.Tests/MyApp.Scoring.Tests.csproj"],
+    "thresholds": { "high": 80, "low": 65, "break": 65 },
+    "ignore-mutations": ["string"],
+    "reporters": ["html", "progress", "json"],
+    "mutate": ["!**/Telemetry.cs"]
+  }
+}
+```
+
+- `break: 65` fails the run when the score drops below it. Start there and raise it gradually.
+- The `string` mutator is ignored because log and wire text mutations are noise.
+
+## Equivalent mutants
+
+Some mutants cannot be killed because the behavior is identical (for example
+`i < n` versus `i != n` in a loop that cannot overshoot).
+
+:::caution[Do not weaken production code to kill a mutant]
+Document equivalent mutants explicitly (a list next to the config, or a
+`// Stryker disable once <mutator> : <reason>` comment) instead of
+restructuring correct code.
+:::
+
+
+```csharp
+// Stryker disable once Equality : loop bound is unreachable either way
+for (var i = 0; i < items.Count; i++) { ... }
+```
+
+## Running
+
+Locally, use a Docker container for a consistent environment:
+
+```bash
+docker run --rm -v "$PWD:/src" -w /src/src/MyApp.Scoring.Tests \
+  mcr.microsoft.com/dotnet/sdk:10.0 \
+  sh -c "dotnet tool restore && dotnet stryker -f stryker-config.json"
+```
+
+In CI, run the tool directly with `--local` where the job already has the SDK:
+
+```bash
+dotnet stryker -f stryker-config.json --local
+```
+
+## CI
+
+Mutation runs are slow, so schedule them weekly and never on pull requests. Use
+a matrix with one job per target project.
+
+```yaml
+name: mutation
+on:
+  schedule: [{ cron: "0 3 * * 0" }]
+  workflow_dispatch:
+jobs:
+  stryker:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        project: [Scoring, Search, RuleSet]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with: { dotnet-version: 10.0.x }
+      - run: dotnet tool restore
+      - working-directory: src/MyApp.${{ matrix.project }}.Tests
+        run: dotnet stryker -f stryker-config.json --local
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: stryker-${{ matrix.project }}
+          path: src/MyApp.${{ matrix.project }}.Tests/StrykerOutput
+```
+
+:::tip[Workflow]
+Read the HTML report, pick surviving mutants in boundary logic first, add a
+test that pins the exact value, re-run. Treat the score as a signal, not a goal.
+:::
+
+---
+
+## Architecture Tests with ArchUnitNET
+
+Architecture tests turn structural conventions into failing builds. They live in
+a dedicated project (for example `MyApp.Architecture.Tests`) and use
+[ArchUnitNET](https://github.com/TNG/ArchUnitNET).
+
+## What to enforce
+
+- Reference direction
+- Domain isolation
+- Naming conventions
+- One class per file
+
+## Loading the architecture
+
+```csharp
+internal static class ArchitectureFixture
+{
+    public static readonly Architecture Architecture = new ArchLoader()
+        .LoadAssemblies(
+            typeof(MyApp.Core.CoreMarker).Assembly,
+            typeof(MyApp.Search.SearchMarker).Assembly,
+            typeof(MyApp.Download.DownloadMarker).Assembly)
+        .Build();
+}
+```
+
+## Reference direction
+
+The allowed direction is `Host -> API -> Domains -> Core -> Messages/Persistence`.
+Never upward.
+
+```csharp
+[Fact]
+public void Core_DoesNotDependOnDomains()
+{
+    var core = Types().That().ResideInNamespaceMatching(@"MyApp\.Core(\..*)?").As("Core");
+    var domains = Types().That().ResideInNamespaceMatching(@"MyApp\.(Search|Download)(\..*)?");
+
+    core.Should().NotDependOnAny(domains).Check(ArchitectureFixture.Architecture);
+}
+```
+
+## Domain isolation
+
+Domain projects must not reference each other. They communicate only through
+messages.
+
+```csharp
+[Theory]
+[InlineData("Search", "Download")]
+[InlineData("Download", "Search")]
+public void Domains_DoNotReferenceEachOther(string from, string to)
+{
+    Types().That().ResideInNamespaceMatching($@"MyApp\.{from}(\..*)?")
+        .Should().NotDependOnAny(Types().That().ResideInNamespaceMatching($@"MyApp\.{to}(\..*)?"))
+        .Check(ArchitectureFixture.Architecture);
+}
+```
+
+## Naming conventions
+
+| Kind | Rule |
+|------|------|
+| Actors | `*Manager` (singleton), `*Worker` (entity), `*Actor` (other); derive from an actor base |
+| Messages | Commands `VerbNoun`, queries `QueryNoun`, events past tense |
+| State | `<Actor>State`, sealed class |
+
+```csharp
+[Fact]
+public void ManagerClasses_AreActors()
+{
+    Classes().That().HaveNameEndingWith("Manager")
+        .Should().BeAssignableTo(typeof(ActorBase))
+        .Check(ArchitectureFixture.Architecture);
+}
+```
+
+## One class per file
+
+ArchUnitNET inspects compiled types, so enforce this with a small file-based
+test or an analyzer rule (for example IDE0065 / a Roslyn analyzer) rather than
+the architecture model.
+
+:::note[Allowed exceptions]
+Small wrapper records next to their state class and a command with its
+response records are deliberate groupings; whitelist them explicitly.
+:::
+
+
+## Do not over-constrain
+
+:::caution
+Keep the rules at the same level of detail as the reference project. Every
+rule should encode a decision the team actually made and would defend.
+Rules that block legitimate refactors, or that restate what the compiler
+already enforces, create friction and get disabled.
+:::
+
+
+- Prefer a few rules on stable boundaries over many on incidental structure.
+- Failure messages should name the rule (`.As("...")` / `Because("...")`).
+- Never fix a violation by weakening the rule; fix the code or change the decision.
+
+---
+
+# DI & Configuration
+
+---
+
+## DI Conventions
+
+Dependency injection is organized per domain and composed in `Program.cs`. The container is never queried by application code.
+
+## Composable `Add*` extensions
+
+Group related registrations into `Add*` extension methods on `IServiceCollection`. Tests can then reuse the same composition.
+
+```csharp
+public static class SearchServiceCollectionExtensions
+{
+    public static IServiceCollection AddSearch(this IServiceCollection services)
+    {
+        services.AddOptions<SearchOptions>()
+            .BindConfiguration(SearchOptions.SectionName)
+            .ValidateOnStart();
+        services.AddSingleton<IValidateOptions<SearchOptions>, SearchOptionsValidator>();
+
+        services.AddHttpClient<IMediaClient, MediaClient>();
+        return services;
+    }
+}
+```
+
+## Per-domain setup containers
+
+Each domain owns a setup container implementing a setup interface (for example `ISetup<IServiceCollection>`). The host applies them in a deliberate order.
+
+```csharp
+builder.Setups()
+    .Add<LoggingSetupContainer>()
+    .Add<TelemetrySetupContainer>()
+    .Add<SearchSetupContainer>()
+    .Add<DownloadSetupContainer>();
+
+var app = builder.Build();
+
+app.Setups()
+    .Add<SearchEndpointsSetupContainer>()
+    .Add<ApplicationSetupContainer>();
+```
+
+:::caution[Order matters]
+Logging and telemetry are applied first. The application-level container is applied last, after every domain has registered its services and endpoints.
+:::
+
+
+Domain setup containers live in their own domain project. The host only references the container type, never the individual registrations.
+
+## No service locator
+
+:::danger
+Never inject `IServiceProvider` to resolve dependencies on demand. Declare dependencies in the constructor.
+:::
+
+
+Legitimate exceptions are infrastructure factories that must create scoped instances (for example a hosted service creating a scope per unit of work, or an actor DI resolver). Keep them in one place and do not spread them into domain code.
+
+## Options, not manual construction
+
+- Never write `new MyOptions(...)` and register it as a singleton.
+- Inject `IOptions<T>` (or `IOptionsMonitor<T>` / `IOptionsSnapshot<T>` when reload semantics are needed) everywhere.
+- See [Options Pattern](options-pattern) for binding, validation, and `PostConfigure`.
+
+## Validators live next to options
+
+Register the `IValidateOptions<T>` implementation in the same `Add*` method that registers the options. A reader should find binding, validation, and start-up validation in one place.
+
+```csharp
+services.AddOptions<DownloadOptions>().BindConfiguration("Download").ValidateOnStart();
+services.AddSingleton<IValidateOptions<DownloadOptions>, DownloadOptionsValidator>();
+```
+
+## Lifetimes
+
+| Lifetime | Use for |
+|----------|---------|
+| Singleton | Stateless services, caches, HTTP client factories |
+| Scoped | Per-request state (EF Core `DbContext`) |
+| Transient | Lightweight, stateless helpers |
+
+Never capture a scoped service in a singleton. Enable `ValidateScopes` and `ValidateOnBuild` in development to catch it early.
+
+---
+
+## Options Pattern
+
+:::danger[Frequently corrected]
+Do not build custom singleton resolution when `IOptions<T>` plus `PostConfigure` already exists. Reaching for a bespoke resolver, plan object, or info service is the most common mistake in this area.
+:::
+
+
+## The standard shape
+
+```csharp
+services.AddOptions<DownloadOptions>()
+    .Bind(configuration.GetSection(DownloadOptions.SectionName))
+    .ValidateOnStart();
+
+services.AddSingleton<IValidateOptions<DownloadOptions>, DownloadOptionsValidator>();
+```
+
+- Use `AddOptions<T>().Bind(section).ValidateOnStart()`.
+- Do not construct the options object manually and register it with `AddSingleton`.
+- Consumers inject `IOptions<T>` (or `IOptionsMonitor<T>` when values may change at runtime).
+
+## Computed and derived values: PostConfigure
+
+When a value depends on other registrations or other options (for example, resolving requirements from the set of registered features), compute it in `PostConfigure`.
+
+```csharp
+services.AddOptions<PipelineOptions>()
+    .Bind(configuration.GetSection("Pipeline"))
+    .PostConfigure<IEnumerable<IFeature>>((options, features) =>
+    {
+        options.Requirements = features
+            .SelectMany(f => f.Requirements)
+            .Distinct()
+            .ToArray();
+    })
+    .ValidateOnStart();
+```
+
+`PostConfigure` runs after all `Configure` / `Bind` calls, so it sees the final bound values and can safely derive from them.
+
+:::note
+`PostConfigure<TDep>` accepts injected dependencies, so there is no need for a hand-written factory or a lazily built singleton.
+:::
+
+
+## Validation: IValidateOptions
+
+Use a dedicated `IValidateOptions<T>` class. Do not use inline lambdas in `.Validate(...)` for anything beyond a trivial one-liner.
+
+```csharp
+public sealed class DownloadOptionsValidator : IValidateOptions<DownloadOptions>
+{
+    public ValidateOptionsResult Validate(string? name, DownloadOptions options)
+    {
+        var failures = new List<string>();
+
+        if (options.MaxParallel < 1)
+        {
+            failures.Add($"{nameof(options.MaxParallel)} must be at least 1.");
+        }
+
+        if (string.IsNullOrWhiteSpace(options.TargetDirectory))
+        {
+            failures.Add($"{nameof(options.TargetDirectory)} is required.");
+        }
+
+        return failures.Count == 0
+            ? ValidateOptionsResult.Success
+            : ValidateOptionsResult.Fail(failures);
+    }
+}
+```
+
+A class is testable in isolation, can take injected dependencies, and reports all failures at once.
+
+## Defaults
+
+Defaults belong in `appsettings.json` or environment variables, not in code.
+
+| Do | Don't |
+|----|-------|
+| `"MaxParallel": 2` in `appsettings.json` | `public int MaxParallel { get; set; } = 2;` scattered across classes |
+| Override with `Download__MaxParallel=4` | `options ??= new DownloadOptions { ... }` |
+
+Required values should be `required` properties or validated, so a missing setting fails at startup instead of silently using a code default.
+
+## Anti-patterns
+
+- A `FetchPlan` / `ServiceInfo`-style object that recomputes state from several options. Use `PostConfigure` or a dedicated service that injects `IOptions<T>`.
+- Custom singleton resolution or static accessors for options.
+- `new MyOptions(...)` in application code.
+- Validation that only runs on first use. Always call `ValidateOnStart()`.
+
+## Decision guide
+
+1. Plain settings: `Bind` + `ValidateOnStart`.
+2. Rules over those settings: `IValidateOptions<T>`.
+3. Values derived from settings or registrations: `PostConfigure`.
+4. Behavior (not data) built from multiple options: a dedicated service injecting `IOptions<T>`.
+
+---
+
+# Observability
+
+---
+
+## Metrics Conventions
+
+Metrics use `System.Diagnostics.Metrics` with one meter per domain, exported through OpenTelemetry to Prometheus.
+
+## Telemetry class per domain
+
+Each domain has a static `Telemetry` class with an `internal static readonly Meter` named `YourApp.<Domain>` and `internal static readonly` instruments.
+
+```csharp
+internal static class Telemetry
+{
+    internal static readonly Meter Meter = new("YourApp.Download");
+
+    internal static readonly Counter<long> Completed =
+        Meter.CreateCounter<long>("yourapp.download.completed_total");
+
+    internal static readonly Counter<long> Failed =
+        Meter.CreateCounter<long>("yourapp.download.failed_total");
+
+    internal static readonly Histogram<double> Duration =
+        Meter.CreateHistogram<double>("yourapp.download.duration_seconds", unit: "s");
+
+    private static int _queueSize;
+
+    internal static readonly ObservableGauge<int> QueueSize =
+        Meter.CreateObservableGauge("yourapp.download.queue_size", () => _queueSize);
+
+    internal static void SetQueueSize(int value) => _queueSize = value;
+}
+```
+
+:::note[No abstraction]
+No base class, no shared `IMetrics` wrapper, no generic helper for meters. Each domain's `Telemetry` class is plain static code.
+:::
+
+
+## Registration
+
+Register every meter centrally in the telemetry setup, then export with Prometheus.
+
+```csharp
+services.AddOpenTelemetry()
+    .WithMetrics(m => m
+        .AddMeter("YourApp.Download")
+        .AddMeter("YourApp.Search")
+        .AddPrometheusExporter());
+```
+
+A meter that is not registered emits nothing, so add the `.AddMeter(...)` line in the same change that creates the meter.
+
+## Naming
+
+| Element | Rule | Example |
+|---------|------|---------|
+| Meter | `YourApp.<Domain>` | `YourApp.Download` |
+| Instrument | `yourapp.<domain>.<metric_name>` in snake_case | `yourapp.download.duration_seconds` |
+| Counter | ends with `_total` | `yourapp.search.requests_total` |
+| Time histogram | ends with `_seconds` | `yourapp.search.duration_seconds` |
+
+## Tags
+
+- Short, lowercase names: `reason`, `source`, `type`, `status`, `phase`.
+- Cardinality must stay bounded.
+
+:::danger[Never use unbounded values as tags]
+Entity IDs, file names, URLs, and query strings create one time series per value and will overwhelm the metrics backend. Map them to a small fixed set (`reason=timeout`) instead.
+:::
+
+
+```csharp
+Telemetry.Failed.Add(1, new KeyValuePair<string, object?>("reason", "timeout"));
+```
+
+## ObservableGauge
+
+Use a static backing field with an `internal static void Set*()` setter. The actor (or service) calls the setter when the value changes. The gauge callback only reads the field.
+
+This keeps the gauge callback free of actor state access and thread-safety concerns.
+
+## Instrument at the operation boundary
+
+Record metrics where the operation completes, success or failure, not at each call site that starts it.
+
+```csharp
+// Good: one place, covers every path
+private void Complete(Stopwatch sw, bool ok)
+{
+    Telemetry.Duration.Record(sw.Elapsed.TotalSeconds);
+    (ok ? Telemetry.Completed : Telemetry.Failed).Add(1);
+}
+```
+
+This prevents double counting and missed failure paths when an operation has several entry points.
+
+---
+
+## Logging Conventions
+
+Which logger you use depends on where the code runs. Structured templates are mandatory everywhere.
+
+## Which logger
+
+| Context | Logger |
+|---------|--------|
+| Akka actors | `ILoggingAdapter` via `Context.GetLogger()` |
+| Services, endpoints, hosted services | `ILogger<T>` from Microsoft.Extensions.Logging |
+
+:::danger[No ILogger in actors]
+Never inject or use `ILogger` inside an actor. Use the Akka `ILoggingAdapter` so log events carry actor path and flow through the actor system's logging pipeline.
+:::
+
+
+```csharp
+public sealed class DownloadWorker : ReceiveActor
+{
+    private readonly ILoggingAdapter _log = Context.GetLogger();
+
+    public DownloadWorker()
+    {
+        Receive<StartDownload>(cmd =>
+            _log.Info("Starting download {DownloadId}", cmd.DownloadId));
+    }
+}
+
+public sealed class RuleSetLoader(ILogger<RuleSetLoader> logger)
+{
+    public void Load(string id) =>
+        logger.LogInformation("Loading ruleset {RuleSetId}", id);
+}
+```
+
+## Structured templates
+
+Use message templates with named placeholders. Never use string interpolation or concatenation in log calls.
+
+```csharp
+_log.Warning("Retry {Attempt} for {DownloadId}", attempt, id);   // correct
+_log.Warning($"Retry {attempt} for {id}");                        // wrong
+```
+
+Interpolation destroys structure (no queryable properties) and allocates even when the level is disabled.
+
+## Thread-safety restrictions
+
+:::caution[Never log inside PipeTo callbacks]
+`PipeTo` success/failure delegates run outside the actor's message-processing context. Return a message instead and log in the handler that receives it.
+:::
+
+
+:::caution[Never use `Context.GetLogger()` inside Akka.Streams lambdas]
+Stream stages run on a different thread, and `Context` is not valid there. Capture the `ILoggingAdapter` into a local variable before building the stream, or log from the actor when the stream completes.
+:::
+
+
+```csharp
+var log = _log; // captured on the actor thread
+Source.From(items)
+    .Select(i => { log.Debug("Processing {Item}", i); return i; });
+```
+
+## Log levels
+
+| Level | Use for |
+|-------|---------|
+| Debug | Flow tracing, state transitions, per-message detail |
+| Information | Business events (download completed, ruleset loaded) |
+| Warning | Recoverable issues (retry, fallback, rejected input) |
+| Error | Failures that need attention |
+
+Pass the exception as the first argument rather than formatting its message into the template.
+
+```csharp
+_log.Error(ex, "Download {DownloadId} failed", id);
+logger.LogError(ex, "Download {DownloadId} failed", id);
+```
+
+## Sink configuration
+
+Serilog is the sink, configured once in the host. Domain projects reference only the abstractions (`ILogger<T>`, `ILoggingAdapter`) and never configure sinks, enrichers, or minimum levels themselves.
+
+Minimum levels and overrides belong in `appsettings.json` so they can change per environment without a rebuild.
+
+## Do not log
+
+- Secrets, tokens, API keys, and passwords.
+- Full request or response bodies at Information level.
+- Personal data without a documented reason.
+
+---
+
+# CI/CD
+
+---
+
+## Build Pipeline
+
+The build has one job: prove the solution compiles cleanly, is formatted, and passes its tests. All commands run from the repository root.
+
+The template repositories ([dotnet.application](https://github.com/st0o0/dotnet.application), [dotnet.library](https://github.com/st0o0/dotnet.library)) ship with CI workflows that run these steps automatically. See [GitHub Actions](github-actions) for the workflow setup.
+
+## Steps
+
+```powershell
+dotnet build src/YourApp.slnx
+dotnet format src/YourApp.slnx --verify-no-changes
+dotnet run --project src/YourApp.Search.Tests/YourApp.Search.Tests.csproj
+```
+
+1. `dotnet build` compiles every project.
+2. `dotnet format --verify-no-changes` fails when any file deviates from `.editorconfig`.
+3. Tests run per test project.
+
+Run `dotnet format` locally after editing `.cs` files so CI does not reject the change.
+
+## Zero warnings
+
+Set `TreatWarningsAsErrors` once in `Directory.Build.props`:
+
+```xml
+<Project>
+  <PropertyGroup>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+  </PropertyGroup>
+</Project>
+```
+
+:::danger[Never add NoWarn]
+The build must stay at 0 warnings. Fix the cause. Do not add `<NoWarn>`, `#pragma warning disable`, or `.editorconfig` severity downgrades to make a warning go away.
+:::
+
+
+Warnings as errors also gives you compile-time guarantees for patterns like exhaustive `switch` expressions (a missing arm is CS8509).
+
+## Tests: dotnet run, not dotnet test
+
+xUnit v3 test projects are executables on Microsoft.Testing.Platform. Run them with `dotnet run`.
+
+```powershell
+dotnet run --project src/YourApp.Download.Tests/YourApp.Download.Tests.csproj
+```
+
+:::note
+`dotnet test` is the VSTest entry point and is not the supported path for xUnit v3 on Microsoft.Testing.Platform. Pass extra options after `--`, for example `-- --report-trx`.
+:::
+
+
+In test code, pass `TestContext.Current.CancellationToken` to every call that accepts a `CancellationToken` (analyzer xUnit1051). The code fix can apply this:
+
+```powershell
+dotnet format analyzers src/YourApp.slnx --diagnostics xUnit1051 --severity info
+```
+
+## Coverage and quality gate
+
+| Signal | Role |
+|--------|------|
+| Code coverage | Collected and reported, **not a gate** |
+| Mutation testing | **The quality gate** |
+
+Coverage only shows which lines ran. Mutation testing shows whether the tests would notice a change in behavior. Do not set a minimum coverage threshold that fails the build, because it rewards assertion-free tests.
+
+See [GitHub Actions](github-actions) for how mutation testing is scheduled.
+
+## Checklist
+
+- [x] Build and format run from the repo root
+- [x] `TreatWarningsAsErrors` in `Directory.Build.props`
+- [x] No `NoWarn` anywhere
+- [x] Tests run with `dotnet run`
+- [x] Coverage collected, mutation score is the gate
+
+---
+
+## GitHub Actions
+
+Workflows are split by cost: fast checks on every change, slow checks on a schedule. All CI workflows call reusable workflows from [github-workflows](https://github.com/st0o0/github-workflows) - pin to a major version tag (e.g. `@v1`).
+
+The template repositories ([dotnet.application](https://github.com/st0o0/dotnet.application), [dotnet.library](https://github.com/st0o0/dotnet.library)) ship with these workflows pre-configured. You should not need to write them from scratch.
+
+## Reusable workflows
+
+| Workflow | Purpose |
+|----------|---------|
+| `dotnet-ci.yml` | Build, test, security (Trivy and CodeQL) |
+| `dotnet-release-docker.yml` | Per-RID publish, multi-arch Docker, cosign signing |
+| `dotnet-release-nuget.yml` | Build, test, pack, NuGet push, GitHub Release asset |
+| `dotnet-dev-build.yml` | Label-gated PR dev image (per-RID, multi-arch) |
+| `commitlint.yml` | Commit message validation via Conventional Commits |
+| `security.yml` | Trivy Docker image scan with SARIF upload |
+| `labeler.yml` | Path-based PR labeling |
+| `labels.yml` | Label definition sync |
+
+## CI workflow
+
+Runs build, format check, and tests on every push and pull request.
+
+```yaml
+name: ci
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+jobs:
+  ci:
+    uses: st0o0/github-workflows/.github/workflows/dotnet-ci.yml@v1
+    with:
+      solution-file: src/ProjectName.slnx
+```
+
+The `dotnet-ci` workflow reads the SDK version from `global.json` so CI and local development use the same SDK. See [Build Pipeline](build) for the commands themselves.
+
+## Release architecture
+
+Use release-please to create releases from Conventional Commits, then chain build and publish jobs.
+
+```yaml
+name: release
+on:
+  push:
+    branches: [main]
+
+permissions:
+  contents: write
+  packages: write
+  id-token: write
+
+jobs:
+  release-please:
+    uses: st0o0/github-workflows/.github/workflows/release-please.yml@v1
+
+  docker:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: st0o0/github-workflows/.github/workflows/dotnet-release-docker.yml@v1
+    with:
+      version: ${{ needs.release-please.outputs.version }}
+      image-name: projectname
+      image-description: "Project description"
+```
+
+For NuGet libraries, replace the docker job with `dotnet-release-nuget.yml`:
+
+```yaml
+  nuget:
+    needs: release-please
+    if: needs.release-please.outputs.release_created == 'true'
+    uses: st0o0/github-workflows/.github/workflows/dotnet-release-nuget.yml@v1
+    with:
+      version: ${{ needs.release-please.outputs.version }}
+      solution-file: src/ProjectName.slnx
+      publish-project: src/ProjectName/ProjectName.csproj
+      package-name: ProjectName
+    secrets:
+      NUGET_USER: ${{ secrets.NUGET_USER }}
+```
+
+:::tip
+The release workflow runs release-please first, then only chains build/publish when `release_created` is true. This avoids the GITHUB_TOKEN limitation where workflow-created releases do not trigger `on: release`.
+:::
+
+## Mutation testing
+
+:::caution[Schedule it, do not run it on PRs]
+Mutation testing is too slow for pull requests. Run it weekly on a schedule and allow manual dispatch.
+:::
+
+Use a matrix with one job per target project so jobs run in parallel and one failing target does not hide the others.
+
+```yaml
+name: mutation
+on:
+  schedule:
+    - cron: "0 3 * * 0"
+  workflow_dispatch:
+
+jobs:
+  mutate:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [Search, Download, Scoring, Feed]
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          global-json-file: global.json
+      - run: dotnet tool restore
+      - run: dotnet stryker --config-file src/ProjectName.${{ matrix.target }}.Tests/stryker-config.json
+      - uses: actions/upload-artifact@v4
+        with:
+          name: mutation-${{ matrix.target }}
+          path: "**/StrykerOutput/**/reports/*"
+```
+
+## Security scanning
+
+The `security.yml` workflow scans Docker images with Trivy and uploads results to the GitHub Security tab.
+
+```yaml
+  security:
+    uses: st0o0/github-workflows/.github/workflows/security.yml@v1
+    with:
+      docker-image-name: projectname
+```
+
+## Docker image build (PR dev builds)
+
+Label-gated dev image builds on PRs, useful for testing changes in a staging environment.
+
+```yaml
+  dev-build:
+    uses: st0o0/github-workflows/.github/workflows/dotnet-dev-build.yml@v1
+    with:
+      image-name: projectname
+```
+
+## Do not push results to the repo
+
+:::danger
+Never commit test results, coverage reports, or mutation reports back to the repository from a workflow. They create noisy history and merge conflicts.
+:::
+
+Upload them as workflow artifacts (`actions/upload-artifact`) or publish to a report site instead.
+
+## Permissions
+
+The calling job must declare its own `permissions:` block. Without it, the reusable workflow run fails with `Invalid workflow file`.
+
+## Checklist
+
+- [x] CI on every push and PR via `dotnet-ci.yml`
+- [x] Releases via release-please + chained build/publish
+- [x] Commit messages enforced via `commitlint.yml`
+- [x] Mutation testing weekly, matrix per target
+- [x] Security scanning via `security.yml`
+- [x] Reports as artifacts, never committed
+- [x] All workflows pinned to `@v1` from [github-workflows](https://github.com/st0o0/github-workflows)
+
+---
