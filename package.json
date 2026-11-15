@@ -1,0 +1,31 @@
+{
+  "name": "anvil",
+  "type": "module",
+  "version": "0.0.1",
+  "scripts": {
+    "dev": "astro dev",
+    "build": "astro build",
+    "preview": "astro preview",
+    "check": "astro check",
+    "lint": "prettier --check . && eslint . && markdownlint-cli2 'src/content/**/*.{md,mdx}'",
+    "lint:js": "eslint .",
+    "lint:md": "markdownlint-cli2 'src/content/**/*.{md,mdx}'",
+    "format": "prettier --write .",
+    "astro": "astro"
+  },
+  "dependencies": {
+    "@astrojs/starlight": "^0.43.1",
+    "astro": "^7.3.6",
+    "sharp": "^0.35.3"
+  },
+  "devDependencies": {
+    "@astrojs/check": "^0.9.4",
+    "@eslint/js": "^10.0.1",
+    "eslint": "^10.15.0",
+    "eslint-plugin-astro": "^3.2.1",
+    "markdownlint-cli2": "^0.24.1",
+    "prettier": "^3.5.3",
+    "typescript-eslint": "^8.72.2"
+  },
+  "packageManager": "pnpm@12.4.1"
+}

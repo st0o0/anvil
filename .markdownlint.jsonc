@@ -1,0 +1,18 @@
+{
+  // Line length - disabled, content lines vary
+  "MD013": false,
+  // Inline HTML - disabled, needed for Astro/MDX components
+  "MD033": false,
+  // First line heading - disabled, Starlight uses frontmatter title
+  "MD041": false,
+  // Bare URLs - disabled, used in code examples
+  "MD034": false,
+  // Multiple blank lines - disabled, artifact of admonition conversion
+  "MD012": false,
+  // Table column style - disabled, compact tables are fine
+  "MD060": false,
+  // Blanks around lists - disabled, lists inside asides don't need them
+  "MD032": false,
+  // Blanks around fences - disabled, code blocks inside Starlight asides cannot have blank lines
+  "MD031": false
+}

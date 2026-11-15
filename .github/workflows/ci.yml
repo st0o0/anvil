@@ -1,0 +1,27 @@
+name: CI
+
+# Note: Preview deployments for PRs require Cloudflare Pages or Netlify.
+# GitHub Pages supports only a single deployment. For now, the CI build
+# verification is sufficient. Consider adding preview deploys later.
+
+on:
+  pull_request:
+    branches: [astro]
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm run check
+      - run: pnpm run build
+      - name: Check internal links
+        uses: lycheeverse/lychee-action@v2
+        with:
+          args: --no-progress --offline --include-fragments 'dist/**/*.html'
+          fail: true

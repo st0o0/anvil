@@ -1,4 +1,19 @@
+# Astro
+dist/
+.astro/
+node_modules/
+npm-debug.log*
+pnpm-debug.log*
+
+# MkDocs (legacy, kept during migration)
 site/
 __pycache__/
 *.pyc
 .venv/
+
+# Environment
+.env
+.env.production
+
+# OS
+.DS_Store
