@@ -1,4 +1,4 @@
-/* Anvil — Forge Theme
+/* Anvil - Forge Theme
    Warm amber accent on deep dark backgrounds */
 
 /* ── Accent Colors ── */
@@ -21,22 +21,59 @@
 		monospace;
 }
 
-/* ── Hero Tweaks ── */
-.hero {
-	padding-block: 3rem;
+/* ── Splash / Hero Page Centering ── */
+[data-has-hero] .hero {
+	padding-block: 4rem;
+	text-align: center;
 }
 
-.hero .tagline {
+[data-has-hero] .hero > .sl-container {
+	margin-inline: auto;
+}
+
+[data-has-hero] .hero .tagline {
 	font-size: var(--sl-text-xl) !important;
 	color: var(--sl-color-gray-2);
+	max-width: 40rem;
+	margin-inline: auto;
 }
 
-.hero h1 {
+[data-has-hero] .hero h1 {
 	font-size: var(--sl-text-5xl) !important;
 	background: linear-gradient(135deg, #e8a838, #f0c060, #e8a838);
 	background-clip: text;
 	-webkit-background-clip: text;
 	-webkit-text-fill-color: transparent;
+}
+
+[data-has-hero] .hero .sl-flex {
+	justify-content: center;
+}
+
+[data-has-hero] .main-pane .content-panel {
+	max-width: none;
+	margin-inline: auto;
+}
+
+[data-has-hero] .main-pane .content-panel > .sl-container {
+	max-width: 56rem;
+	margin-inline: auto;
+}
+
+[data-has-hero] .sl-markdown-content {
+	max-width: 56rem;
+	margin-inline: auto;
+}
+
+[data-has-hero] .sl-markdown-content > h2,
+[data-has-hero] .sl-markdown-content > h3 {
+	text-align: center;
+}
+
+[data-has-hero] .sl-markdown-content > p {
+	text-align: center;
+	max-width: 44rem;
+	margin-inline: auto;
 }
 
 /* ── Sidebar Polish ── */
