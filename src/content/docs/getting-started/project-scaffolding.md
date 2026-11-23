@@ -25,8 +25,14 @@ Always start from a template. Do not create a new repo from scratch and copy fil
 repo/
   global.json
   .editorconfig
+  CLAUDE.md
   .config/
     dotnet-tools.json
+  .claude/
+    settings.json
+  .slopwatch/
+    slopwatch.json
+    baseline.json
   commitlint.config.mjs
   renovate.json
   release-please-config.json
@@ -134,6 +140,7 @@ Declare tools in `.config/dotnet-tools.json` so everyone (and CI) uses the same 
   "version": 1,
   "isRoot": true,
   "tools": {
+    "slopwatch.cmd": { "version": "0.4.0", "commands": ["slopwatch"] },
     "dotnet-stryker": { "version": "4.0.0", "commands": ["dotnet-stryker"] },
     "dotnet-reportgenerator-globaltool": { "version": "5.3.0", "commands": ["reportgenerator"] }
   }
@@ -141,3 +148,29 @@ Declare tools in `.config/dotnet-tools.json` so everyone (and CI) uses the same 
 ```
 
 Restore with `dotnet tool restore`. `dotnet format` ships with the SDK, so it needs no manifest entry.
+
+## Slopwatch (LLM anti-cheat)
+
+The templates ship with [Slopwatch](https://github.com/st0o0/slopwatch) pre-configured in strict mode. It detects shortcuts that make builds pass without solving the underlying problem — disabled tests, warning suppression, empty catch blocks, arbitrary delays, and CPM bypasses.
+
+### What's included
+
+| File | Purpose |
+|------|---------|
+| `.config/dotnet-tools.json` | Slopwatch as a local tool |
+| `.slopwatch/slopwatch.json` | Strict config — all rules at error severity |
+| `.slopwatch/baseline.json` | Empty baseline for a fresh project |
+| `.claude/settings.json` | Claude Code hook that validates every edit |
+| `.github/workflows/ci.yml` | `slopwatch: true` enables it in the reusable workflow |
+
+### Claude Code hook
+
+The hook runs `slopwatch analyze --hook` after every file edit in a Claude Code session. If it flags an issue, the edit is blocked and Claude sees the error immediately.
+
+### CI gate
+
+The reusable `dotnet-ci.yml` workflow from [github-workflows](https://github.com/st0o0/github-workflows) has Slopwatch built in. The templates enable it with `slopwatch: true`. It runs `slopwatch analyze --fail-on error` in the lint job on every pull request.
+
+:::danger[Never update the baseline to pass CI]
+If Slopwatch flags something, fix the code. Only update `.slopwatch/baseline.json` when a third-party library forces a pattern, and document why in a code comment.
+:::
